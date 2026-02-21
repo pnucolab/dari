@@ -1,0 +1,192 @@
+services:
+  db:
+    image: postgres:18
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - ./db/postgres_data:/var/lib/postgresql
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "4"
+
+  caddy:
+    image: caddy:2.10.2
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ./db/caddy_data:/data
+      - ./db/caddy_config:/config
+    environment:
+      - SITE_DOMAIN=${SITE_DOMAIN}
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "4"
+
+  ldap:
+    build: ./ldap
+    ports:
+      - "636:636"
+    environment:
+      - LDAP_ORGANISATION=${LDAP_ORGANISATION}
+      - LDAP_DOMAIN=${LDAP_DOMAIN}
+      - LDAP_BASE_DN=${LDAP_BASE_DN}
+      - LDAP_CONFIG_PASSWORD=${LDAP_ADMIN_PASSWORD}
+      - LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD}
+      - LDAP_TLS_VERIFY_CLIENT=try
+    volumes:
+      - ./db/ldap_data:/var/lib/ldap
+      - ./db/ldap_config:/etc/ldap/slapd.d
+      - ./db/ldap_certs:/container/service/slapd/assets/certs
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "4"
+
+  rabbitmq:
+    image: rabbitmq:4
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "4"
+
+  celery_worker:
+    build: ./backend
+    command: sh -c "celery -A backend worker -l info"
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - SITE_DOMAIN=${SITE_DOMAIN}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_HOST=db
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+      - LDAP_DOMAIN=${LDAP_DOMAIN}
+      - LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - EMAIL_USE_SSL=${EMAIL_USE_SSL}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL}
+      - EMAIL_SUBJECT_PREFIX=${EMAIL_SUBJECT_PREFIX}
+    volumes:
+      - /mnt/archive:/archive
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "4"
+
+  celery_beat:
+    build: ./backend
+    command: sh -c "celery -A backend beat -l info"
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_HOST=db
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+      - LDAP_DOMAIN=${LDAP_DOMAIN}
+      - LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - EMAIL_USE_SSL=${EMAIL_USE_SSL}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL}
+      - EMAIL_SUBJECT_PREFIX=${EMAIL_SUBJECT_PREFIX}
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "4"
+
+  vpn:
+    build: ./vpn
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    ports:
+      - 1194:1194/udp
+    environment:
+      - LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD}
+      - SITE_DOMAIN=${SITE_DOMAIN}
+    volumes:
+      - ./vpn/pam.d/openvpn:/etc/pam.d/openvpn
+      - ./vpn/server.conf:/etc/openvpn/server.conf
+      - ./db/vpn_easy_rsa:/etc/openvpn/easy-rsa
+      - ./db/qr:/etc/qr
+      - ./db/ip_addresses:/etc/ip_addresses
+      - ./db/ovpn:/etc/ovpn
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "4"
+
+  backend:
+    build: ./backend
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - SITE_DOMAIN=${SITE_DOMAIN}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_HOST=db
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+      - LDAP_DOMAIN=${LDAP_DOMAIN}
+      - LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD}
+      - LOG_FILE=/var/log/itservice.log
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - EMAIL_USE_SSL=${EMAIL_USE_SSL}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL}
+      - EMAIL_SUBJECT_PREFIX=${EMAIL_SUBJECT_PREFIX}
+    volumes:
+      - /mnt/dari-home:/dari-home
+      - /etc/skel:/etc/skel
+      - ./db/qr:/etc/qr
+      - ./db/ip_addresses:/etc/ip_addresses
+      - ./db/ovpn:/etc/ovpn
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "4"
+
+  frontend:
+    build: ./frontend
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "4"

@@ -1,0 +1,108 @@
+<script>
+    import { t } from '$lib/translations';
+
+    export let data;
+</script>
+
+<div class="p-10">
+
+<section id="about">
+
+# {$t(\`user.linux_title\`)}
+
+{$t(\`user.linux_content_2\`)}
+
+<table class="w-full text-sm text-left text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 mb-6">
+<thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+<tr>
+<th class="px-6 py-3">{$t('user.linux_server_name')}</th>
+<th class="px-6 py-3">{$t('user.linux_server_ip')}</th>
+<th class="px-6 py-3">{$t('user.linux_server_port')}</th>
+</tr>
+</thead>
+<tbody>
+{#each data.servers as server}
+<tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
+<td class="px-6 py-4">{server.domainname}</td>
+<td class="px-6 py-4">{server.ip}</td>
+<td class="px-6 py-4">{server.port || '-'}</td>
+</tr>
+{:else}
+<tr class="bg-white dark:bg-gray-800">
+<td class="px-6 py-4 text-center" colspan="3">{$t('user.linux_server_none')}</td>
+</tr>
+{/each}
+</tbody>
+</table>
+
+{@html $t('user.linux_content_3')}
+
+</section>
+
+
+<section id="connect">
+
+# {$t(\`user.linux_connect_title\`)}
+
+{$t(\`user.linux_connect_intro\`)}
+
+## {$t(\`user.linux_connect_content_5\`)}
+
+- {@html $t('user.linux_connect_content_6')}
+- {@html $t('user.linux_connect_content_7')}
+
+<pre>
+<code>{$t('user.linux_connect_content_8')}</code>
+</pre>
+
+- {@html $t('user.linux_connect_content_9')}
+- {@html $t('user.linux_connect_content_10')}
+
+## {$t(\`user.linux_connect_content_11\`)}
+
+- {@html $t('user.linux_connect_content_12')}
+- {@html $t('user.linux_connect_content_13')}
+- {@html $t('user.linux_connect_content_14')}
+![VSCode Remote SSH](/vscode-remote-ssh.png)
+- {@html $t('user.linux_connect_content_15')}
+- {@html $t('user.linux_connect_content_16')}
+
+<pre>
+<code>{$t('user.linux_connect_content_8')}</code>
+</pre>
+
+- {@html $t('user.linux_connect_content_17')}
+- {@html $t('user.linux_connect_content_18')}
+- {@html $t('user.linux_connect_content_19')}
+- {@html $t('user.linux_connect_content_20')}
+- {@html $t('user.linux_connect_content_21')}
+
+</section>
+
+<section id="ssh-key">
+
+# {$t(\`user.linux_ssh-key_title\`)}
+
+{$t(\`user.linux_ssh-key_content_1\`)}
+
+## {$t(\`user.linux_ssh-key_content_2\`)}
+- {@html $t('user.linux_ssh-key_content_3')}
+- {@html $t('user.linux_ssh-key_content_4')}
+    ```
+    ssh-keygen
+    ```
+- {@html $t('user.linux_ssh-key_content_5')}
+    - {@html $t('user.linux_ssh-key_content_6')}: `id_rsa`
+    - {@html $t('user.linux_ssh-key_content_7')}: `id_rsa.pub`
+- {@html $t('user.linux_ssh-key_content_8')}
+
+## {$t(\`user.linux_ssh-key_content_9\`)}
+- {@html $t('user.linux_ssh-key_content_10')}
+- {@html $t('user.linux_ssh-key_content_11')}
+- {@html $t('user.linux_ssh-key_content_12')}
+
+{@html $t('user.linux_ssh-key_content_13')}
+
+</section>
+
+</div>

@@ -1,0 +1,9 @@
+{
+    "id": "아이디",
+    "pw": "비밀번호",
+    "agree": "<a href=\"/privacy\" class=\"text-blue-600 hover:underline dark:text-blue-500\">개인정보처리방침</a>에 동의합니다.",
+    "login": "로그인",
+    "login.failed": "로그인에 실패했습니다. 아이디와 비밀번호를 확인해주세요.",
+    "email_not_verified": "이메일 인증이 완료되지 않았습니다. 이메일을 확인해주세요.",
+    "register": "회원가입"
+}
