@@ -1,0 +1,22 @@
+<script>
+  import { Button } from 'flowbite-svelte';
+  import { t } from '$lib/translations';
+</script>
+
+<main class="p-10">
+
+# {$t(\`common.consent.title\`)}
+
+{$t(\`common.consent.content_1\`)}
+
+- {$t(\`common.consent.content_2\`)}
+  - {$t(\`common.consent.content_3\`)}
+  - {$t(\`common.consent.content_4\`)}
+- {$t(\`common.consent.content_5\`)}
+  - {$t(\`common.consent.content_6\`)}
+
+{$t(\`common.consent.content_7\`)}
+
+<Button on:click={() => history.back()} class="mt-10" size="lg" color="blue">{$t('common.back')}</Button>
+
+</main>

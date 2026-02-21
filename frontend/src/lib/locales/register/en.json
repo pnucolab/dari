@@ -1,0 +1,19 @@
+{
+    "title": "Register",
+    "description": "Create an account to use the service.",
+    "username": "Username",
+    "username_placeholder": "lowercase letters and numbers",
+    "username_hint": "Must start with a lowercase letter. Only lowercase letters and numbers allowed (1-31 chars).",
+    "name": "Name",
+    "email": "Email",
+    "email_placeholder": "example@example.com",
+    "password": "Password",
+    "password_confirm": "Confirm password",
+    "register": "Register",
+    "registering": "Registering...",
+    "back_to_login": "Back to login",
+    "success": "Registration complete. Please verify your email before logging in.",
+    "verify_success": "Email verified successfully. Please log in.",
+    "verify_failed": "Email verification failed. The link may have expired or is invalid.",
+    "email_not_verified": "Email not verified. Please check your email."
+}

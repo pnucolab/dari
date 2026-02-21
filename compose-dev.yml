@@ -1,0 +1,158 @@
+services:
+  db:
+    image: postgres:18
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - ./db/postgres_data:/var/lib/postgresql
+    restart: always
+
+  caddy:
+    image: caddy:2.10.2
+    ports:
+      - "8080:80"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ./db/caddy_data:/data
+      - ./db/caddy_config:/config
+    environment:
+      - SITE_DOMAIN=:80
+    restart: always
+
+  ldap:
+    build: ./ldap
+    environment:
+      - LDAP_ORGANISATION=${LDAP_ORGANISATION}
+      - LDAP_DOMAIN=${LDAP_DOMAIN}
+      - LDAP_BASE_DN=${LDAP_BASE_DN}
+      - LDAP_CONFIG_PASSWORD=${LDAP_ADMIN_PASSWORD}
+      - LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD}
+      - LDAP_TLS_VERIFY_CLIENT=try
+    volumes:
+      - ./db/ldap_data:/var/lib/ldap
+      - ./db/ldap_config:/etc/ldap/slapd.d
+      - ./db/ldap_certs:/container/service/slapd/assets/certs
+    restart: always
+
+  rabbitmq:
+    image: rabbitmq:4
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "4"
+
+  celery_worker:
+    build: ./backend
+    command: sh -c "celery -A backend worker -l info"
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_HOST=db
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+      - LDAP_DOMAIN=${LDAP_DOMAIN}
+      - LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - EMAIL_USE_SSL=${EMAIL_USE_SSL}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL}
+      - EMAIL_SUBJECT_PREFIX=${EMAIL_SUBJECT_PREFIX}
+    volumes:
+      - ./backend:/app
+      - ./archive:/archive
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "4"
+
+  celery_beat:
+    build: ./backend
+    command: sh -c "celery -A backend beat -l info"
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_HOST=db
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+      - LDAP_DOMAIN=${LDAP_DOMAIN}
+      - LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - EMAIL_USE_SSL=${EMAIL_USE_SSL}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL}
+      - EMAIL_SUBJECT_PREFIX=${EMAIL_SUBJECT_PREFIX}
+    volumes:
+      - ./backend:/app
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "4"
+
+  backend:
+    build: ./backend
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun
+    ports:
+      - "3425:8080"
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - SITE_DOMAIN=${SITE_DOMAIN}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_HOST=db
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+      - LDAP_DOMAIN=${LDAP_DOMAIN}
+      - LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD}
+      - LOG_FILE=/dev/null
+      - DEBUG=True
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - EMAIL_USE_SSL=${EMAIL_USE_SSL}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL}
+      - EMAIL_SUBJECT_PREFIX=${EMAIL_SUBJECT_PREFIX}
+    volumes:
+      - ./vpn/pam.d/openvpn:/etc/pam.d/openvpn
+      - ./vpn/auth-ldap.conf:/etc/openvpn/auth-ldap.conf
+      - ./db/qr:/etc/qr
+      - ./vpn/server.conf:/etc/openvpn/server.conf
+      - ./vpn/easy-rsa:/etc/easy-rsa
+      - ./dari-home:/dari-home
+      - ./db/iptables_data:/etc/iptables
+      - ./backend:/app
+    logging:
+      driver: syslog
+    restart: always
+
+  frontend:
+    build: ./frontend
+    environment:
+      - DEBUG=True
+    volumes:
+      - ./frontend:/app
+    restart: always

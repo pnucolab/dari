@@ -1,0 +1,2 @@
+auth required /lib/x86_64-linux-gnu/security/pam_google_authenticator.so secret=/etc/qr/${USER} authtok_prompt=pin user=root echo_verification_code
+account required pam_permit.so

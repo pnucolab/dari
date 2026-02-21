@@ -1,0 +1,16 @@
+{
+    "logout": "Logout",
+    "profile": "My info",
+    "privacy": "Privacy Policy",
+    "en": "English",
+    "ko": "한국어",
+    "consent.title": "Privacy Policy",
+    "consent.content_1": "To use this service, you must agree to the collection and use of personal information as follows in accordance with Article 15 and Article 17 of the Personal Information Protection Act.",
+    "consent.content_2": "Matters concerning the collection and use of personal information",
+    "consent.content_3": "Personal information items collected: Name, email, account ID",
+    "consent.content_4": "Purpose of using personal information: The collected personal information is used to create and manage accounts for IT services, and is not used for any other purpose.",
+    "consent.content_5": "Retention and use period of personal information",
+    "consent.content_6": "We store your personal information as follows and process it in accordance with Article 21 of the Personal Information Protection Act when the purpose of collection, use, and provision is achieved: Retained for up to 1 year after the end of usage period",
+    "consent.content_7": "You have the right to refuse to consent to the collection of personal information. However, if you do not agree, you cannot use this service.",
+    "back": "Go Back"
+}
