@@ -1,0 +1,11 @@
+{
+    "title": "Reset Password",
+    "new_password": "New Password",
+    "confirm_password": "Confirm Password",
+    "submit": "Change Password",
+    "submitting": "Changing...",
+    "success": "Your password has been changed. Please log in with your new password.",
+    "failed": "Password reset failed. The link may have expired or is invalid.",
+    "password_mismatch": "Passwords do not match.",
+    "back_to_login": "Back to login"
+}

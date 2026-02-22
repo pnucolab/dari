@@ -1006,3 +1006,55 @@ def get_dari_home_server(request):
         return {"server_pk": srv.pk, "domainname": srv.domainname}
     except (Default.DoesNotExist, Server.DoesNotExist, ValueError):
         return {"server_pk": None, "domainname": None}
+
+# --- Password Reset ---
+
+@api.post("/forgot-password", auth=None)
+def forgot_password(request, username: str, email: str):
+    """Send password reset email if user exists."""
+    from django.contrib.auth.tokens import default_token_generator
+    from django.utils.http import urlsafe_base64_encode
+    from django.utils.encoding import force_bytes
+
+    try:
+        user = User.objects.get(username=username)
+        if (user.email.lower() == email.lower()
+            and user.is_active
+            and hasattr(user, 'linux')
+            and not username.startswith('guest')):
+            uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+            token = default_token_generator.make_token(user)
+            lang = request.COOKIES.get('lang', 'ko')
+            from dariauth.tasks import send_password_reset_email_task
+            send_password_reset_email_task.delay(user.email, uidb64, token, lang)
+    except User.DoesNotExist:
+        pass
+
+    return {"success": True}
+
+@api.post("/reset-password", auth=None)
+def reset_password(request, uid: str, token: str, new_password: str):
+    """Reset password using token from email."""
+    from django.contrib.auth.tokens import default_token_generator
+    from django.utils.http import urlsafe_base64_decode
+
+    try:
+        user_pk = urlsafe_base64_decode(uid).decode()
+        user = User.objects.get(pk=user_pk)
+    except (User.DoesNotExist, ValueError, TypeError):
+        return api.create_response(request, {"error": "Invalid link"}, status=400)
+
+    if not default_token_generator.check_token(user, token):
+        return api.create_response(request, {"error": "Invalid or expired link"}, status=400)
+
+    if not hasattr(user, 'linux'):
+        return api.create_response(request, {"error": "No Linux account"}, status=400)
+
+    try:
+        ldapops.set_password(user.linux.username, new_password)
+        user.logs.create(service="Portal", content="Password reset via email.")
+        logger.warning(f"User {user.username} reset password via email.")
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Error resetting password for {user.username}: {e}")
+        return api.create_response(request, {"error": str(e)}, status=500)
