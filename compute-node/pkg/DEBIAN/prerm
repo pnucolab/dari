@@ -1,0 +1,63 @@
+#!/bin/bash
+set -e
+
+NSSWITCH_BACKUP="/etc/nsswitch.conf.dari-backup"
+
+case "$1" in
+    remove|purge)
+        # Stop and disable systemd timer
+        systemctl stop dari-update.timer 2>/dev/null || true
+        systemctl disable dari-update.timer 2>/dev/null || true
+        systemctl stop dari-update.service 2>/dev/null || true
+
+        # Unmount all autofs dari mounts
+        if [ -f /etc/auto.master.d/dari.autofs ]; then
+            # Force unmount before removing config
+            systemctl stop autofs 2>/dev/null || true
+        fi
+
+        # Restore original nsswitch.conf
+        if [ -f "$NSSWITCH_BACKUP" ]; then
+            cp "$NSSWITCH_BACKUP" /etc/nsswitch.conf
+            rm -f "$NSSWITCH_BACKUP"
+        fi
+
+        # Restore /home from /home.local if it exists
+        if [ -d /home.local ]; then
+            echo "dari-compute-node: Restoring home directories from /home.local..."
+            for dir in /home.local/*/; do
+                [ -d "$dir" ] || continue
+                username=$(basename "$dir")
+
+                if [ ! -d "/home/$username" ]; then
+                    mv "$dir" "/home/$username"
+
+                    # Restore /etc/passwd entry
+                    if grep -q ":/home.local/$username:" /etc/passwd 2>/dev/null; then
+                        sed -i "s|:/home.local/$username:|:/home/$username:|" /etc/passwd
+                    fi
+
+                    echo "  Restored /home.local/$username -> /home/$username"
+                fi
+            done
+
+            rmdir /home.local 2>/dev/null || true
+        fi
+
+        # Clean up generated files
+        rm -f /etc/dari/auto.home
+        rm -f /etc/dari/auto.dari.*
+        rm -f /etc/auto.master.d/dari.autofs
+        rm -f /etc/dari/ldap-ca.crt
+
+        # Restart services
+        systemctl restart nslcd 2>/dev/null || true
+        systemctl restart autofs 2>/dev/null || true
+
+        systemctl daemon-reload
+
+        echo "dari-compute-node removed."
+        ;;
+esac
+
+exit 0

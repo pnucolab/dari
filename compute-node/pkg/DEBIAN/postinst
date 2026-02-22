@@ -1,0 +1,119 @@
+#!/bin/bash
+set -e
+
+. /usr/share/debconf/confmodule
+
+DARI_CONF="/etc/dari/compute-node.conf"
+NSSWITCH_BACKUP="/etc/nsswitch.conf.dari-backup"
+
+case "$1" in
+    configure)
+        # Read debconf values
+        db_get dari-compute-node/api_url; API_URL="$RET"
+        db_get dari-compute-node/api_key; API_KEY="$RET"
+        db_get dari-compute-node/management_iface; MGMT_IFACE="$RET"
+        db_get dari-compute-node/nfs_iface; NFS_IFACE="$RET"
+        db_get dari-compute-node/ldap_uri; LDAP_URI="$RET"
+        db_get dari-compute-node/allsmi_port; ALLSMI_PORT="$RET"
+
+        # Auto-derive LDAP URI from API URL if not set
+        if [ -z "$LDAP_URI" ] && [ -n "$API_URL" ]; then
+            LDAP_HOST=$(echo "$API_URL" | sed -E 's|https?://([^:/]+).*|\1|')
+            LDAP_URI="ldaps://${LDAP_HOST}"
+        fi
+
+        # Write configuration file
+        cat > "$DARI_CONF" <<EOF
+[network]
+management_iface = ${MGMT_IFACE:-eno1}
+nfs_iface = ${NFS_IFACE:-eno2}
+
+[dari]
+api_url = ${API_URL}
+api_key = ${API_KEY}
+
+[ldap]
+uri = ${LDAP_URI}
+base_dn = dc=dari
+tls_cacert = /etc/dari/ldap-ca.crt
+
+[nfs]
+poll_interval = 60
+mount_options = rw,soft,intr,timeo=30
+
+[allsmi]
+port = ${ALLSMI_PORT:-9100}
+EOF
+
+        # Configure nslcd if LDAP URI is set
+        if [ -n "$LDAP_URI" ]; then
+            cat > /etc/nslcd.conf <<NSLCD
+# managed by dari-compute-node
+uid nslcd
+gid nslcd
+
+uri ${LDAP_URI}
+base dc=dari
+
+ssl on
+tls_reqcert allow
+tls_cacertfile /etc/dari/ldap-ca.crt
+NSLCD
+        fi
+
+        # Back up original nsswitch.conf
+        if [ ! -f "$NSSWITCH_BACKUP" ]; then
+            cp /etc/nsswitch.conf "$NSSWITCH_BACKUP"
+        fi
+
+        # Update nsswitch.conf to include ldap
+        if ! grep -q "ldap" /etc/nsswitch.conf 2>/dev/null; then
+            sed -i 's/^passwd:.*/passwd:         files ldap/' /etc/nsswitch.conf
+            sed -i 's/^group:.*/group:          files ldap/' /etc/nsswitch.conf
+        fi
+
+        # Migrate existing /home directories to /home.local
+        if [ -d /home ] && [ ! -L /home ] && [ ! -d /home.local ]; then
+            echo "dari-compute-node: Migrating existing home directories to /home.local..."
+            mkdir -p /home.local
+
+            for dir in /home/*/; do
+                [ -d "$dir" ] || continue
+                username=$(basename "$dir")
+
+                case "$username" in
+                    lost+found) continue ;;
+                esac
+
+                mv "$dir" "/home.local/$username"
+
+                if grep -q ":/home/$username:" /etc/passwd 2>/dev/null; then
+                    sed -i "s|:/home/$username:|:/home.local/$username:|" /etc/passwd
+                fi
+
+                echo "  Moved /home/$username -> /home.local/$username"
+            done
+        fi
+
+        # Enable and start systemd timer
+        systemctl daemon-reload
+        systemctl enable dari-update.timer
+        systemctl start dari-update.timer
+
+        # Run initial config update if configured
+        if [ -n "$API_URL" ] && [ -n "$API_KEY" ]; then
+            /usr/lib/dari/update-config.sh || true
+        fi
+
+        # Restart services
+        systemctl restart nslcd 2>/dev/null || true
+        systemctl restart autofs 2>/dev/null || true
+
+        echo ""
+        echo "dari-compute-node configured successfully."
+        echo "To reconfigure, run: sudo dpkg-reconfigure dari-compute-node"
+        echo ""
+        ;;
+esac
+
+exit 0

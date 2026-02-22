@@ -10,8 +10,30 @@ export async function load({ parent, cookies }) {
 }
 
 export const actions = {
+	groups: async ({ cookies }) => {
+		const response = await get('groups', cookies);
+
+		if (!response.ok || response.status !== 200) {
+			return fail(response.status);
+		}
+
+		return {
+			servers: JSON.stringify(response.data),
+		};
+	},
 	servers: async ({ cookies }) => {
 		const response = await get('servers', cookies);
+
+		if (!response.ok || response.status !== 200) {
+			return fail(response.status);
+		}
+
+		return {
+			servers: JSON.stringify(response.data),
+		};
+	},
+	stats: async ({ cookies }) => {
+		const response = await get('servers/stats', cookies);
 
 		if (!response.ok || response.status !== 200) {
 			return fail(response.status);
@@ -41,15 +63,4 @@ export const actions = {
 
 		return;
 	},
-	logs: async ({ cookies }) => {
-		const response = await get(`logs?all=true`, cookies);
-
-		if (!response.ok || response.status !== 200) {
-			return fail(response.status);
-		}
-
-		return {
-			servers: JSON.stringify(response.data),
-		};
-	}
 };

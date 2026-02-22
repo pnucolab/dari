@@ -1,0 +1,12 @@
+Package: dari-compute-node
+Version: 1.0.0
+Architecture: all
+Maintainer: DARI Admin <admin@dari.com>
+Pre-Depends: debconf
+Depends: nslcd, libpam-ldapd, autofs, nfs-common, curl, jq
+Recommends: all-smi
+Section: admin
+Priority: optional
+Description: DARI compute node provisioning package
+ Automatically configures LDAP authentication, NFS automounting,
+ and GPU monitoring (all-smi) for compute nodes managed by DARI.

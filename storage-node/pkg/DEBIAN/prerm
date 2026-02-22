@@ -1,0 +1,28 @@
+#!/bin/bash
+set -e
+
+EXPORTS_BACKUP="/etc/exports.dari-backup"
+
+case "$1" in
+    remove|purge)
+        # Stop and disable systemd timer
+        systemctl stop dari-storage-update.timer 2>/dev/null || true
+        systemctl disable dari-storage-update.timer 2>/dev/null || true
+        systemctl stop dari-storage-update.service 2>/dev/null || true
+
+        # Restore original /etc/exports
+        if [ -f "$EXPORTS_BACKUP" ]; then
+            cp "$EXPORTS_BACKUP" /etc/exports
+            rm -f "$EXPORTS_BACKUP"
+        fi
+
+        # Re-export with restored config
+        exportfs -ra 2>/dev/null || true
+
+        systemctl daemon-reload
+
+        echo "dari-storage-node removed."
+        ;;
+esac
+
+exit 0

@@ -1,0 +1,3 @@
+# DARI automounter - managed by dari-compute-node
+# Home directories
+/home /etc/dari/auto.home --timeout=600

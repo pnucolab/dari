@@ -12,7 +12,7 @@
     "register": "Register",
     "registering": "Registering...",
     "back_to_login": "Back to login",
-    "success": "Registration complete. Please verify your email before logging in.",
+    "success": "Registration complete. Please verify your email. You will be able to log in once an admin approves your account.",
     "verify_success": "Email verified successfully. Please log in.",
     "verify_failed": "Email verification failed. The link may have expired or is invalid.",
     "email_not_verified": "Email not verified. Please check your email."

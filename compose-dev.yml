@@ -23,6 +23,8 @@ services:
 
   ldap:
     build: ./ldap
+    ports:
+      - "636:636"
     environment:
       - LDAP_ORGANISATION=${LDAP_ORGANISATION}
       - LDAP_DOMAIN=${LDAP_DOMAIN}
@@ -53,6 +55,7 @@ services:
     command: sh -c "celery -A backend worker -l info"
     environment:
       - SECRET_KEY=${SECRET_KEY}
+      - SITE_DOMAIN=${SITE_DOMAIN}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
@@ -143,7 +146,7 @@ services:
       - ./vpn/server.conf:/etc/openvpn/server.conf
       - ./vpn/easy-rsa:/etc/easy-rsa
       - ./dari-home:/dari-home
-      - ./db/iptables_data:/etc/iptables
+      - ./db/ip_addresses:/etc/ip_addresses
       - ./backend:/app
     logging:
       driver: syslog

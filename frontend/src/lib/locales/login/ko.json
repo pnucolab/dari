@@ -5,5 +5,7 @@
     "login": "로그인",
     "login.failed": "로그인에 실패했습니다. 아이디와 비밀번호를 확인해주세요.",
     "email_not_verified": "이메일 인증이 완료되지 않았습니다. 이메일을 확인해주세요.",
+    "pending_approval": "관리자의 승인을 기다리고 있습니다. 승인 후 로그인이 가능합니다.",
+    "account_deactivated": "계정이 만료되었습니다. 관리자에게 문의하세요.",
     "register": "회원가입"
 }

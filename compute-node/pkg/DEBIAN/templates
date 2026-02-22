@@ -1,0 +1,33 @@
+Template: dari-compute-node/api_url
+Type: string
+Description: DARI server API URL
+ The full URL to the DARI API endpoint (e.g., https://dari.example.com/api).
+
+Template: dari-compute-node/api_key
+Type: string
+Description: API key for this compute node
+ The API key assigned to this server in the DARI admin panel (Admin > Servers).
+
+Template: dari-compute-node/management_iface
+Type: select
+Choices: ${choices}
+Description: Management network interface
+ Network adapter used for management traffic (DARI API, LDAP, all-smi).
+
+Template: dari-compute-node/nfs_iface
+Type: select
+Choices: ${choices}
+Description: NFS network interface
+ Network adapter used for NFS data traffic.
+
+Template: dari-compute-node/ldap_uri
+Type: string
+Description: LDAP server URI
+ URI of the LDAP server (e.g., ldaps://dari.example.com).
+ Leave blank to auto-derive from the API URL.
+
+Template: dari-compute-node/allsmi_port
+Type: string
+Default: 9100
+Description: all-smi API port
+ Port for the all-smi API mode endpoint.
