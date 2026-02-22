@@ -1,0 +1,8 @@
+[Unit]
+Description=DARI storage node export config update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/dari/update-exports.sh

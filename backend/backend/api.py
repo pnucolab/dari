@@ -8,7 +8,7 @@ from django.contrib.auth import login as auth_login, logout as auth_logout, auth
 from django_ratelimit.decorators import ratelimit
 
 from django.contrib.auth.models import User
-from dariauth.models import Default, Profile, VPNInfo, LinuxInfo, GuestInfo, Server, LinuxGroup, Log
+from dariauth.models import Default, Profile, VPNInfo, LinuxInfo, GuestInfo, Server, LinuxGroup, Log, NFSShare
 from django.db.models import Max
 from .schema import *
 from .utils import check_active_status, check_admin_status, check_groupadmin_status, validate, ldapops, get_serverstat, send_email, send_verification_email, add_ip, delete_ip
@@ -155,21 +155,25 @@ def login(request):
             logger.warning("Portal user {} failed to login (reason: invalid password).".format(username))
             return api.create_response(request, None, status=401)
     else:
-        # Regular users authenticate via LDAP
+        # Regular users authenticate via LDAP, fall back to Django password
         if not hasattr(user, 'linux'):
             user.logs.create(service="Portal", content="Login failed.")
             logger.warning("Portal user {} failed to login (reason: no linux account).".format(username))
             return api.create_response(request, None, status=401)
 
         if not ldapops.authenticate_user(user.linux.username, password):
-            user.logs.create(service="Portal", content="Login failed.")
-            logger.warning("Portal user {} failed to login (reason: invalid LDAP password).".format(username))
-            return api.create_response(request, None, status=401)
+            # LDAP auth failed - try Django password (first login, LDAP not yet provisioned)
+            if not user.check_password(password):
+                user.logs.create(service="Portal", content="Login failed.")
+                logger.warning("Portal user {} failed to login (reason: invalid password).".format(username))
+                return api.create_response(request, None, status=401)
 
     if not user.is_active:
         logger.warning("Portal user {} failed to login (reason: not active)".format(username))
         user.logs.create(service="Portal", content="Login failed.")
-        return api.create_response(request, None, status=401)
+        if hasattr(user, 'profile') and user.profile.date_expire is None and user.profile.date_removal is None:
+            return api.create_response(request, {"error": "pending_approval"}, status=403)
+        return api.create_response(request, {"error": "account_deactivated"}, status=403)
 
     # Check email verification (skip for guest users)
     if not username.startswith('guest'):
@@ -179,7 +183,21 @@ def login(request):
             return api.create_response(request, {"error": "email_not_verified"}, status=403)
 
     auth_login(request, user)
-    
+
+    # Provision LDAP account and home directory on first login
+    if hasattr(user, 'linux') and not username.startswith('guest'):
+        if not os.path.exists(f'/dari-home/{user.linux.username}'):
+            ldapops.add_user(user.linux.username, user.linux.uid, user.linux.group.gid, user.linux.shell, password)
+            os.system(f'cp -r /etc/skel /dari-home/{user.linux.username}')
+            os.system(f'chmod 750 /dari-home/{user.linux.username}')
+            os.system(f'chown -R {user.linux.uid}:{user.linux.group.gid} /dari-home/{user.linux.username}')
+            logger.warning(f"Provisioned LDAP account and home directory for {username}")
+
+    # Update expiry date on login (non-staff users expire 6 months after last login)
+    if not user.is_staff and hasattr(user, 'profile'):
+        user.profile.date_expire = (timezone.now() + timezone.timedelta(days=6*30)).date()
+        user.profile.save(update_fields=['date_expire'])
+
     logger.warning("Portal user {} authentication successful.".format(username))
     user.logs.create(service="Portal", content="Login successful.")
     return {"success": True, "sessionid": request.session.session_key}
@@ -234,7 +252,7 @@ def register(request):
     try:
         # Create Django user
         is_first_user = User.objects.count() == 0
-        user = User(username=username, email=email, is_active=True)
+        user = User(username=username, email=email, is_active=is_first_user)
         user.save()
 
         # Create profile
@@ -251,19 +269,19 @@ def register(request):
         linux = LinuxInfo(user=user, username=username, uid=uid, group=lg, shell=default_shell)
         linux.save()
 
-        # Add to LDAP with password
-        ldapops.add_user(linux.username, linux.uid, lg.gid, default_shell, password)
+        # Store password in Django for now; LDAP + home dir created on first login
+        user.set_password(password)
+        user.save()
 
-        # Create home directory
-        os.system(f'cp -r /etc/skel /dari-home/{username}')
-        os.system(f'chmod 750 /dari-home/{username}')
-        os.system(f'chown -R {uid}:{lg.gid} /dari-home/{username}')
-
-        # If this is the first user, make them admin
+        # If this is the first user, make them admin and provision immediately
         if is_first_user:
             user.is_staff = True
             user.is_superuser = True
             user.save()
+            ldapops.add_user(linux.username, linux.uid, lg.gid, default_shell, password)
+            os.system(f'cp -r /etc/skel /dari-home/{username}')
+            os.system(f'chmod 750 /dari-home/{username}')
+            os.system(f'chown -R {uid}:{lg.gid} /dari-home/{username}')
 
         # Email verification via allauth
         email_address = EmailAddress.objects.create(
@@ -294,34 +312,63 @@ def verify_email(request, key: str):
     if not confirmation:
         return api.create_response(request, {"error": "Invalid or expired key"}, status=400)
     confirmation.confirm(request)
+
+    # Notify admins that a new user needs approval
+    user = confirmation.email_address.user
+    if not user.is_staff:
+        lang = request.COOKIES.get('lang', 'ko')
+        from dariauth.tasks import send_admin_approval_email_task
+        send_admin_approval_email_task.delay(
+            user.username,
+            user.profile.name if hasattr(user, 'profile') else user.username,
+            user.email,
+            lang
+        )
+
     return {"success": True}
 
 @api.post("/server")
-def server(request, domainname: str, ip: str, port: int = None, allowed_groups: str = ''):
+def server(request, domainname: str, ip: str, port: int = None, allowed_groups: str = '', server_type: str = 'compute', pk: int = None):
     if not check_admin_status(request.user):
         return api.create_response(request, None, status=403)
 
-    server, _ = Server.objects.update_or_create(domainname=domainname, defaults={'ip': ip, 'port': port})
+    if server_type == 'storage':
+        port = None
+
+    if pk:
+        try:
+            srv = Server.objects.get(pk=pk)
+            srv.domainname = domainname
+            srv.ip = ip
+            srv.port = port
+            srv.server_type = server_type
+            srv.save()
+        except Server.DoesNotExist:
+            return api.create_response(request, {"error": "Server not found"}, status=404)
+    else:
+        srv = Server.objects.create(domainname=domainname, ip=ip, port=port, server_type=server_type)
     add_ip(ip)
 
     if allowed_groups:
         group_names = [g.strip() for g in allowed_groups.split(',') if g.strip()]
         groups = LinuxGroup.objects.filter(name__in=group_names)
-        server.allowed_groups.set(groups)
+        srv.allowed_groups.set(groups)
     else:
-        server.allowed_groups.clear()
+        srv.allowed_groups.clear()
 
+    ldapops.regenerate_acls()
     return {"success": True}
 
 @api.delete("/server")
-def server_delete(request, domainname: str):
+def server_delete(request, pk: int):
     if not check_admin_status(request.user):
         return api.create_response(request, None, status=403)
 
-    server = Server.objects.get(domainname=domainname)
+    server = Server.objects.get(pk=pk)
     delete_ip(server.ip)
     server.delete()
 
+    ldapops.regenerate_acls()
     return {"success": True}
 
 @api.post("/guest")
@@ -363,16 +410,30 @@ def servers(request):
     servers = Server.objects.prefetch_related('allowed_groups').all()
     rtn = []
     for server in servers:
-        stats = None
         allowed = list(server.allowed_groups.values_list('name', flat=True))
         rtn.append({
+            "pk": server.pk,
             "domainname": server.domainname,
             "ip": server.ip,
             "port": server.port,
             "visible": server.visible,
-            "stats": stats,
             "allowed_groups": allowed,
+            "api_key": str(server.api_key),
+            "server_type": server.server_type,
         })
+    return rtn
+
+@api.get("/servers/stats")
+def servers_stats(request):
+    if not check_admin_status(request.user):
+        return api.create_response(request, None, status=403)
+    servers = Server.objects.all()
+    rtn = {}
+    for server in servers:
+        try:
+            rtn[server.pk] = get_serverstat(server)
+        except Exception:
+            rtn[server.pk] = None
     return rtn
 
 @api.get("/myservers", response=List[UserServerSchema])
@@ -478,16 +539,24 @@ def groups(request):
             return api.create_response(request, None, status=403)        
     return groups
 
-@api.get("/logs", response=List[LogSchema])
-def logs(request, all: bool = False):
+@api.get("/logs")
+def logs(request, all: bool = False, page: int = 1, per_page: int = 20):
     if all and check_admin_status(request.user):
-        qs = Log.objects.select_related('user', 'user__profile').all().order_by("-created_at")[:20]
+        qs = Log.objects.select_related('user', 'user__profile').all().order_by("-created_at")
     else:
-        qs = request.user.logs.select_related('user', 'user__profile').all().order_by("-created_at")[:20]
-    return [
-        {"username": log.user.username, "name": log.user.profile.name if hasattr(log.user, 'profile') else "", "service": log.service, "content": log.content, "created_at": log.created_at}
-        for log in qs
-    ]
+        qs = request.user.logs.select_related('user', 'user__profile').all().order_by("-created_at")
+    total = qs.count()
+    offset = (page - 1) * per_page
+    items = qs[offset:offset + per_page]
+    return {
+        "items": [
+            {"username": log.user.username, "name": log.user.profile.name if hasattr(log.user, 'profile') else "", "service": log.service, "content": log.content, "created_at": str(log.created_at)}
+            for log in items
+        ],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+    }
 
 @api.post("/group")
 def group(request, name: str, gid: int, members: str):
@@ -495,6 +564,7 @@ def group(request, name: str, gid: int, members: str):
         return api.create_response(request, None, status=403)
     LinuxGroup.objects.create(name=name, gid=gid, members=members)
     ldapops.add_or_modify_group(name, gid, members.split(','))
+    ldapops.regenerate_acls()
     return {"success": True}
 
 @api.put("/group")
@@ -513,6 +583,7 @@ def group(request, pk: int, name: str, gid: int, members: str):
     lg.members = members
     lg.save()
     ldapops.add_or_modify_group(lg.name, lg.gid, members.split(','))
+    ldapops.regenerate_acls()
     return {"success": True}
 
 @api.delete("/group")
@@ -522,6 +593,7 @@ def group(request, pk: int):
     group = LinuxGroup.objects.get(pk=pk)
     ldapops.delete_group(group.name)
     group.delete()
+    ldapops.regenerate_acls()
     return {"success": True}
 
 @api.patch("/user")
@@ -738,3 +810,199 @@ def vpn_profile(request):
     except Exception as e:
         logger.error(f"Error serving VPN profile: {e}")
         return api.create_response(request, {"error": str(e)}, status=500)
+
+# --- NFS Share Management ---
+
+@api.get("/nfsshares")
+def nfsshares(request):
+    if not check_admin_status(request.user):
+        return api.create_response(request, None, status=403)
+    shares = NFSShare.objects.prefetch_related('allowed_groups', 'allowed_servers').all()
+    rtn = []
+    for share in shares:
+        allowed = list(share.allowed_groups.values_list('name', flat=True))
+        allowed_srvs = list(share.allowed_servers.values_list('domainname', flat=True))
+        rtn.append({
+            "pk": share.pk,
+            "name": share.name,
+            "server_ip": share.server_ip,
+            "export_path": share.export_path,
+            "mount_point": share.mount_point,
+            "allowed_groups": allowed,
+            "allowed_servers": allowed_srvs,
+        })
+    return rtn
+
+@api.post("/nfsshare")
+def nfsshare(request, name: str, server_ip: str, export_path: str, mount_point: str, allowed_groups: str = '', allowed_servers: str = ''):
+    if not check_admin_status(request.user):
+        return api.create_response(request, None, status=403)
+
+    share, _ = NFSShare.objects.update_or_create(name=name, defaults={
+        'server_ip': server_ip,
+        'export_path': export_path,
+        'mount_point': mount_point,
+    })
+
+    if allowed_groups:
+        group_names = [g.strip() for g in allowed_groups.split(',') if g.strip()]
+        groups = LinuxGroup.objects.filter(name__in=group_names)
+        share.allowed_groups.set(groups)
+    else:
+        share.allowed_groups.clear()
+
+    if allowed_servers:
+        server_names = [s.strip() for s in allowed_servers.split(',') if s.strip()]
+        servers = Server.objects.filter(domainname__in=server_names)
+        share.allowed_servers.set(servers)
+    else:
+        share.allowed_servers.clear()
+
+    ldapops.regenerate_acls()
+    return {"success": True}
+
+@api.delete("/nfsshare")
+def nfsshare_delete(request, pk: int):
+    if not check_admin_status(request.user):
+        return api.create_response(request, None, status=403)
+    NFSShare.objects.get(pk=pk).delete()
+    ldapops.regenerate_acls()
+    return {"success": True}
+
+# --- Compute Node Config ---
+
+@api.get("/node/config", auth=None)
+def node_config(request, key: str):
+    """Compute node fetches its config using its API key."""
+    try:
+        server = Server.objects.prefetch_related('allowed_groups').get(api_key=key)
+    except (Server.DoesNotExist, ValueError):
+        return api.create_response(request, {"error": "Invalid API key"}, status=403)
+
+    from django.db.models import Q, Count
+
+    # Determine allowed groups for this server
+    server_groups = list(server.allowed_groups.all())
+    has_restrictions = len(server_groups) > 0
+
+    if has_restrictions:
+        group_names = [g.name for g in server_groups]
+        # Resolve all usernames in these groups (primary + secondary)
+        allowed_users = set()
+        for g in server_groups:
+            # Users with this as primary group
+            for li in LinuxInfo.objects.filter(group=g):
+                allowed_users.add(li.username)
+            # Users listed in group members (secondary)
+            if g.members:
+                for m in g.members.split(','):
+                    m = m.strip()
+                    if m:
+                        allowed_users.add(m)
+    else:
+        group_names = list(LinuxGroup.objects.values_list('name', flat=True))
+        allowed_users = set(LinuxInfo.objects.values_list('username', flat=True))
+
+    # Get NFS shares accessible to this server's groups
+    if has_restrictions:
+        nfs_shares = NFSShare.objects.filter(
+            Q(allowed_groups__in=server_groups) | Q(allowed_groups__isnull=True)
+        ).distinct()
+        # Also include shares with no group restrictions
+        nfs_shares = nfs_shares | NFSShare.objects.annotate(
+            num_groups=Count('allowed_groups')
+        ).filter(num_groups=0)
+        nfs_shares = nfs_shares.distinct()
+    else:
+        nfs_shares = NFSShare.objects.all()
+
+    # Resolve dari-home server IP
+    home_server_ip = ""
+    try:
+        home_server_pk = Default.objects.get(key="dari_home_server").value
+        home_server = Server.objects.get(pk=int(home_server_pk))
+        home_server_ip = home_server.ip
+    except (Default.DoesNotExist, Server.DoesNotExist, ValueError):
+        pass
+
+    return {
+        "nfs_shares": [
+            {"server_ip": s.server_ip, "export_path": s.export_path, "mount_point": s.mount_point}
+            for s in nfs_shares
+        ],
+        "allowed_users": sorted(allowed_users),
+        "allowed_groups": sorted(group_names),
+        "ldap_base_dn": "dc=" + os.environ.get('LDAP_DOMAIN', 'dari'),
+        "home_server_ip": home_server_ip,
+    }
+
+# --- Storage Node Config ---
+
+@api.get("/storage/config", auth=None)
+def storage_config(request, key: str):
+    """Storage node fetches its export config using its API key."""
+    try:
+        server = Server.objects.get(api_key=key, server_type='storage')
+    except (Server.DoesNotExist, ValueError):
+        return api.create_response(request, {"error": "Invalid API key"}, status=403)
+
+    from django.db.models import Count
+
+    # Find NFS shares hosted on this storage server (matched by IP)
+    shares = NFSShare.objects.prefetch_related('allowed_servers').filter(server_ip=server.ip)
+
+    # All compute server IPs (for unrestricted shares and dari-home)
+    all_compute_ips = list(Server.objects.filter(server_type='compute').values_list('ip', flat=True))
+
+    exports = []
+    for share in shares:
+        allowed_srvs = list(share.allowed_servers.all())
+        if allowed_srvs:
+            allowed_ips = sorted(set(s.ip for s in allowed_srvs))
+        else:
+            allowed_ips = sorted(set(all_compute_ips))
+        exports.append({
+            "path": share.export_path,
+            "allowed_ips": allowed_ips,
+        })
+
+    # Check if this server exports dari-home
+    dari_home = False
+    dari_home_ips = []
+    try:
+        home_server_pk = Default.objects.get(key="dari_home_server").value
+        if int(home_server_pk) == server.pk:
+            dari_home = True
+            dari_home_ips = sorted(set(all_compute_ips))
+    except (Default.DoesNotExist, ValueError):
+        pass
+
+    return {
+        "exports": exports,
+        "dari_home": dari_home,
+        "dari_home_ips": dari_home_ips,
+    }
+
+# --- Dari Home Server Setting ---
+
+@api.post("/dari-home-server")
+def set_dari_home_server(request, server_pk: int):
+    if not check_admin_status(request.user):
+        return api.create_response(request, None, status=403)
+    try:
+        srv = Server.objects.get(pk=server_pk, server_type='storage')
+    except Server.DoesNotExist:
+        return api.create_response(request, {"error": "Storage server not found"}, status=404)
+    Default.objects.update_or_create(key="dari_home_server", defaults={'value': str(server_pk)})
+    return {"success": True}
+
+@api.get("/dari-home-server")
+def get_dari_home_server(request):
+    if not check_admin_status(request.user):
+        return api.create_response(request, None, status=403)
+    try:
+        pk = Default.objects.get(key="dari_home_server").value
+        srv = Server.objects.get(pk=int(pk))
+        return {"server_pk": srv.pk, "domainname": srv.domainname}
+    except (Default.DoesNotExist, Server.DoesNotExist, ValueError):
+        return {"server_pk": None, "domainname": None}

@@ -1,0 +1,60 @@
+#!/bin/bash
+set -e
+
+. /usr/share/debconf/confmodule
+
+DARI_CONF="/etc/dari/storage-node.conf"
+EXPORTS_BACKUP="/etc/exports.dari-backup"
+
+case "$1" in
+    configure)
+        # Read debconf values
+        db_get dari-storage-node/api_url; API_URL="$RET"
+        db_get dari-storage-node/api_key; API_KEY="$RET"
+        db_get dari-storage-node/management_iface; MGMT_IFACE="$RET"
+        db_get dari-storage-node/nfs_iface; NFS_IFACE="$RET"
+
+        # Write configuration file
+        cat > "$DARI_CONF" <<EOF
+[network]
+management_iface = ${MGMT_IFACE:-eno1}
+nfs_iface = ${NFS_IFACE:-eno2}
+
+[dari]
+api_url = ${API_URL}
+api_key = ${API_KEY}
+
+[nfs]
+poll_interval = 60
+export_options = rw,sync,no_subtree_check,sec=sys
+EOF
+
+        # Enable NFS server
+        systemctl enable nfs-kernel-server 2>/dev/null || true
+
+        # Back up original /etc/exports
+        if [ ! -f "$EXPORTS_BACKUP" ]; then
+            cp /etc/exports "$EXPORTS_BACKUP" 2>/dev/null || touch "$EXPORTS_BACKUP"
+        fi
+
+        # Enable and start systemd timer
+        systemctl daemon-reload
+        systemctl enable dari-storage-update.timer
+        systemctl start dari-storage-update.timer
+
+        # Run initial config update if configured
+        if [ -n "$API_URL" ] && [ -n "$API_KEY" ]; then
+            /usr/lib/dari/update-exports.sh || true
+        fi
+
+        # Restart NFS server
+        systemctl restart nfs-kernel-server 2>/dev/null || true
+
+        echo ""
+        echo "dari-storage-node configured successfully."
+        echo "To reconfigure, run: sudo dpkg-reconfigure dari-storage-node"
+        echo ""
+        ;;
+esac
+
+exit 0

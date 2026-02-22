@@ -1,0 +1,3 @@
+#!/bin/bash
+# Reconfigure dari-storage-node via debconf
+exec dpkg-reconfigure dari-storage-node

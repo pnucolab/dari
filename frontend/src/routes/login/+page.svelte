@@ -41,6 +41,10 @@
             </div>
             {#if form?.error === 'email_not_verified'}
             <Alert color="yellow" class="mb-4" dismissable>{$t("login.email_not_verified")}</Alert>
+            {:else if form?.error === 'pending_approval'}
+            <Alert color="yellow" class="mb-4" dismissable>{$t("login.pending_approval")}</Alert>
+            {:else if form?.error === 'account_deactivated'}
+            <Alert color="red" class="mb-4" dismissable>{$t("login.account_deactivated")}</Alert>
             {:else if form?.error}
             <Alert color="red" class="mb-4" dismissable>{$t("login.login.failed")}</Alert>
             {/if}

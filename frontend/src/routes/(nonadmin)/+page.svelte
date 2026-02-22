@@ -27,7 +27,7 @@
         });
         const result = await response.json();
         const result_json = JSON.parse(JSON.parse(result.data)[1]);
-        logs = result_json;
+        logs = result_json.items || result_json;
     }
 </script>
 

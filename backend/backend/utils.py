@@ -175,6 +175,86 @@ class LDAPOps:
         for e in entries:
             self.conn.delete_s(e[0])
 
+    def regenerate_acls(self):
+        """Regenerate OpenLDAP ACLs based on server allowed_groups.
+        Uses peername.ip and filter= to restrict per-node visibility."""
+        try:
+            servers = Server.objects.prefetch_related('allowed_groups').all()
+            acls = []
+
+            # Rule 0: admin always gets write access, others break to next rule
+            acls.append(b'{0}to * by dn="cn=admin,dc=dari" write by * break')
+
+            # Rule 1: password access
+            acls.append(b'{1}to attrs=userPassword by self write by anonymous auth by * none')
+
+            idx = 2
+            restricted_ips = set()
+            unrestricted_ips = set()
+
+            for srv in servers:
+                groups = list(srv.allowed_groups.all())
+                if not groups:
+                    unrestricted_ips.add(srv.ip)
+                    continue
+
+                restricted_ips.add(srv.ip)
+                # Resolve all member usernames
+                usernames = set()
+                group_names = []
+                for g in groups:
+                    group_names.append(g.name)
+                    # Primary group members
+                    for li in LinuxInfo.objects.filter(group=g):
+                        usernames.add(li.username)
+                    # Secondary group members
+                    if g.members:
+                        for m in g.members.split(','):
+                            m = m.strip()
+                            if m:
+                                usernames.add(m)
+
+                if usernames:
+                    uid_filter = '(|' + ''.join(f'(uid={u})' for u in sorted(usernames)) + ')'
+                    by_clause = f'by peername.ip={srv.ip} read by * break'
+                    acls.append(f'{{{idx}}}to dn.subtree="ou=users,dc=dari" filter={uid_filter} {by_clause}'.encode())
+                    idx += 1
+
+                if group_names:
+                    cn_filter = '(|' + ''.join(f'(cn={g})' for g in sorted(group_names)) + ')'
+                    by_clause = f'by peername.ip={srv.ip} read by * break'
+                    acls.append(f'{{{idx}}}to dn.subtree="ou=groups,dc=dari" filter={cn_filter} {by_clause}'.encode())
+                    idx += 1
+
+            # Unrestricted nodes: full read access to users and groups
+            if unrestricted_ips:
+                by_parts = ' '.join(f'by peername.ip={ip} read' for ip in sorted(unrestricted_ips))
+                acls.append(f'{{{idx}}}to dn.subtree="ou=users,dc=dari" {by_parts} by * break'.encode())
+                idx += 1
+                acls.append(f'{{{idx}}}to dn.subtree="ou=groups,dc=dari" {by_parts} by * break'.encode())
+                idx += 1
+
+            # Default deny
+            acls.append(f'{{{idx}}}to * by * none'.encode())
+
+            # Apply to cn=config
+            config_conn = ldap.initialize(self.uri)
+            config_conn.bind("cn=admin,cn=config", self.pw)
+
+            # Find the MDB database DN
+            results = config_conn.search_s("cn=config", ldap.SCOPE_SUBTREE, "(olcDatabase={1}mdb)")
+            if results:
+                db_dn = results[0][0]
+                mod = [(ldap.MOD_REPLACE, 'olcAccess', acls)]
+                config_conn.modify_s(db_dn, mod)
+                logger.warning(f"LDAP ACLs regenerated: {len(acls)} rules for {len(restricted_ips)} restricted + {len(unrestricted_ips)} unrestricted nodes")
+            else:
+                logger.error("Could not find LDAP MDB database in cn=config")
+
+            config_conn.unbind_s()
+        except Exception as e:
+            logger.error(f"Error regenerating LDAP ACLs: {e}")
+
     def update_ldap(self):
         all_users = self.get_children_or_create_ou("users")
         all_groups = self.get_children_or_create_ou("groups")
@@ -260,8 +340,48 @@ def send_verification_email(to_email, key, lang='ko'):
     logger.warning(subject)
     send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [to_email])
 
+def send_admin_approval_email(username, name, email, lang='ko'):
+    """Send notification to all admin users that a new user has registered and needs approval."""
+    from django.core.mail import send_mail
+
+    domain = os.environ.get('SITE_DOMAIN', 'localhost:8080')
+    scheme = 'https' if not settings.DEBUG else 'http'
+    admin_url = f"{scheme}://{domain}/admin/users"
+
+    prefix = settings.EMAIL_SUBJECT_PREFIX
+
+    if lang == 'ko':
+        subject_text = "새 사용자 승인 요청"
+        body = (
+            f"새로운 사용자가 가입했습니다. 승인이 필요합니다.\n\n"
+            f"아이디: {username}\n"
+            f"이름: {name}\n"
+            f"이메일: {email}\n\n"
+            f"사용자 관리 페이지에서 승인할 수 있습니다:\n{admin_url}"
+        )
+    else:
+        subject_text = "New User Approval Required"
+        body = (
+            f"A new user has registered and requires approval.\n\n"
+            f"Username: {username}\n"
+            f"Name: {name}\n"
+            f"Email: {email}\n\n"
+            f"You can approve the user from the admin panel:\n{admin_url}"
+        )
+
+    subject = f"{prefix} {subject_text}" if prefix else subject_text
+
+    admin_emails = [
+        u.email for u in User.objects.filter(is_staff=True, is_active=True)
+        .exclude(email__isnull=True).exclude(email__exact='')
+    ]
+
+    for admin_email in admin_emails:
+        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [admin_email])
+
 def add_ip(ip):
     import yaml
+    import os
     config_file = "/etc/ip_addresses/conf.yml"
 
     try:
@@ -275,6 +395,7 @@ def add_ip(ip):
 
     if ip not in config['ip_addresses']:
         config['ip_addresses'].insert(0, ip)
+        os.makedirs(os.path.dirname(config_file), exist_ok=True)
         with open(config_file, 'w') as f:
             yaml.safe_dump(config, f, default_flow_style=False)
 

@@ -1,0 +1,10 @@
+Package: dari-storage-node
+Version: 1.0.0
+Architecture: all
+Maintainer: DARI Admin <admin@dari.com>
+Pre-Depends: debconf
+Depends: nfs-kernel-server, curl, jq
+Section: admin
+Priority: optional
+Description: DARI storage node provisioning package
+ Configures NFS exports and access control for storage nodes managed by DARI.

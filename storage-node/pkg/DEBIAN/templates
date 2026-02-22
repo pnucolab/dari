@@ -1,0 +1,21 @@
+Template: dari-storage-node/api_url
+Type: string
+Description: DARI server API URL
+ The full URL to the DARI API endpoint (e.g., https://dari.example.com/api).
+
+Template: dari-storage-node/api_key
+Type: string
+Description: API key for this storage node
+ The API key assigned to this server in the DARI admin panel (Admin > Servers).
+
+Template: dari-storage-node/management_iface
+Type: select
+Choices: ${choices}
+Description: Management network interface
+ Network adapter used for management traffic (DARI API).
+
+Template: dari-storage-node/nfs_iface
+Type: select
+Choices: ${choices}
+Description: NFS network interface
+ Network adapter used for NFS data traffic.

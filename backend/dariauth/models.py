@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
@@ -67,14 +69,28 @@ class LinuxGroup(models.Model):
         return self.name
 
 class Server(models.Model):
+    SERVER_TYPES = [('compute', 'Compute'), ('storage', 'Storage')]
     domainname = models.CharField(max_length=255)
     ip = models.GenericIPAddressField()
     port = models.IntegerField(null=True)
     visible = models.BooleanField(default=True)
     allowed_groups = models.ManyToManyField('LinuxGroup', related_name='allowed_servers', blank=True)
+    api_key = models.UUIDField(default=uuid.uuid4, unique=True)
+    server_type = models.CharField(max_length=10, choices=SERVER_TYPES, default='compute')
 
     def __str__(self):
         return self.domainname
+
+class NFSShare(models.Model):
+    name = models.CharField(max_length=255)
+    server_ip = models.GenericIPAddressField()
+    export_path = models.CharField(max_length=512)
+    mount_point = models.CharField(max_length=512)
+    allowed_groups = models.ManyToManyField('LinuxGroup', related_name='allowed_nfs_shares', blank=True)
+    allowed_servers = models.ManyToManyField('Server', related_name='accessible_nfs_shares', blank=True)
+
+    def __str__(self):
+        return self.name
 
 @receiver(post_save, sender=User)
 def save_user_profile(sender, instance, **kwargs):

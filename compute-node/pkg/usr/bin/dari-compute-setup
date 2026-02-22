@@ -1,0 +1,7 @@
+#!/bin/bash
+# dari-compute-setup: Reconfigure DARI compute node via debconf
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Error: This script must be run as root."
+    exit 1
+fi
+exec dpkg-reconfigure dari-compute-node

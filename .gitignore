@@ -8,3 +8,4 @@ dari-home
 celerybeat-schedule*
 pg_upgrade.sh
 test
+.nfs*

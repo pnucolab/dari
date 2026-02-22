@@ -1,0 +1,24 @@
+#!/bin/bash
+set -e
+
+. /usr/share/debconf/confmodule
+
+# Detect available network interfaces (exclude lo)
+IFACES=$(ip -br link show | awk '$1 != "lo" {print $1}' | paste -sd ', ')
+
+if [ -n "$IFACES" ]; then
+    db_subst dari-storage-node/management_iface choices "$IFACES"
+    db_subst dari-storage-node/nfs_iface choices "$IFACES"
+fi
+
+db_input high dari-storage-node/api_url || true
+db_go || true
+
+db_input high dari-storage-node/api_key || true
+db_go || true
+
+db_input medium dari-storage-node/management_iface || true
+db_go || true
+
+db_input medium dari-storage-node/nfs_iface || true
+db_go || true

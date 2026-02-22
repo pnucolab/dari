@@ -57,11 +57,43 @@ class ServerSchema(Schema):
     visible: bool
     stats: Union[dict[str, str], None]
     allowed_groups: list[str]
+    api_key: str
+    server_type: str
 
 class UserServerSchema(Schema):
     domainname: str
     ip: str
     port: Union[int, None]
+
+class NFSShareSchema(Schema):
+    pk: int
+    name: str
+    server_ip: str
+    export_path: str
+    mount_point: str
+    allowed_groups: list[str]
+    allowed_servers: list[str]
+
+class NodeNFSShareSchema(Schema):
+    server_ip: str
+    export_path: str
+    mount_point: str
+
+class NodeConfigSchema(Schema):
+    nfs_shares: list[NodeNFSShareSchema]
+    allowed_users: list[str]
+    allowed_groups: list[str]
+    ldap_base_dn: str
+    home_server_ip: str
+
+class StorageExportSchema(Schema):
+    path: str
+    allowed_ips: list[str]
+
+class StorageConfigSchema(Schema):
+    exports: list[StorageExportSchema]
+    dari_home: bool
+    dari_home_ips: list[str]
 
 class LogSchema(Schema):
     username: str
