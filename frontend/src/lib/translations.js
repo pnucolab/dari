@@ -51,6 +51,38 @@ const config = ({
     },
     {
       locale: 'ko',
+      key: 'forgot-password',
+      routes: ['/forgot-password'],
+      loader: async () => (
+        await import('./locales/forgot-password/ko.json')
+      ).default,
+    },
+    {
+      locale: 'en',
+      key: 'forgot-password',
+      routes: ['/forgot-password'],
+      loader: async () => (
+        await import('./locales/forgot-password/en.json')
+      ).default,
+    },
+    {
+      locale: 'ko',
+      key: 'reset-password',
+      routes: ['/reset-password'],
+      loader: async () => (
+        await import('./locales/reset-password/ko.json')
+      ).default,
+    },
+    {
+      locale: 'en',
+      key: 'reset-password',
+      routes: ['/reset-password'],
+      loader: async () => (
+        await import('./locales/reset-password/en.json')
+      ).default,
+    },
+    {
+      locale: 'ko',
       key: 'common',
       loader: async () => (
         await import('./locales/common/ko.json')

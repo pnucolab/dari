@@ -340,6 +340,26 @@ def send_verification_email(to_email, key, lang='ko'):
     logger.warning(subject)
     send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [to_email])
 
+def send_password_reset_email(to_email, uidb64, token, lang='ko'):
+    """Send password reset link to a user."""
+    from django.core.mail import send_mail
+
+    domain = os.environ.get('SITE_DOMAIN', 'localhost:8080')
+    scheme = 'https' if not settings.DEBUG else 'http'
+    reset_url = f"{scheme}://{domain}/reset-password?uid={uidb64}&token={token}"
+
+    prefix = settings.EMAIL_SUBJECT_PREFIX
+
+    if lang == 'ko':
+        subject_text = "비밀번호 재설정"
+        body = f"아래 링크를 클릭하여 비밀번호를 재설정해 주세요:\n\n{reset_url}\n\n이 요청을 하지 않았다면 이 이메일을 무시하세요."
+    else:
+        subject_text = "Password Reset"
+        body = f"Please click the link below to reset your password:\n\n{reset_url}\n\nIf you did not request this, please ignore this email."
+
+    subject = f"{prefix} {subject_text}" if prefix else subject_text
+    send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [to_email])
+
 def send_admin_approval_email(username, name, email, lang='ko'):
     """Send notification to all admin users that a new user has registered and needs approval."""
     from django.core.mail import send_mail

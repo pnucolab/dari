@@ -28,9 +28,12 @@
               <Label for="id" class="mb-2">{$t("login.id")}</Label>
               <Input type="text" id="id" name="id" color="blue" required />
             </div>
-            <div class="mb-6">
+            <div class="mb-2">
               <Label for="pw" class="mb-2">{$t("login.pw")}</Label>
               <Input type="password" id="pw" name="pw" color="blue" required />
+            </div>
+            <div class="text-right mb-6">
+              <a href="/forgot-password" class="text-sm text-blue-600 hover:underline dark:text-blue-500">{$t("login.forgot_password")}</a>
             </div>
             <div class="flex items-center gap-2 mb-6">
               <Checkbox color="blue" id="agree" bind:checked={is_agreed} required />
@@ -49,10 +52,16 @@
             <Alert color="red" class="mb-4" dismissable>{$t("login.login.failed")}</Alert>
             {/if}
             {#if submitting}
-              <Button class="w-full mb-4" color="green" disabled>{$t("login.login")}</Button>
+              <Button class="w-full" color="green" disabled>{$t("login.login")}</Button>
             {:else}
-              <Button type="submit" class="w-full mb-4" color="green">{$t("login.login")}</Button>
+              <Button type="submit" class="w-full" color="green">{$t("login.login")}</Button>
             {/if}
+
+            <div class="flex items-center my-4">
+              <hr class="flex-grow border-gray-300" />
+              <span class="px-3 text-sm text-gray-500">{$t("login.or")}</span>
+              <hr class="flex-grow border-gray-300" />
+            </div>
 
             <Button href="/register" class="w-full" color="blue" outline>{$t("login.register")}</Button>
           </form>

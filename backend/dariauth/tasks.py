@@ -51,3 +51,8 @@ def send_verification_email_task(to_email, key, lang='ko'):
 def send_admin_approval_email_task(username, name, email, lang='ko'):
     from backend.utils import send_admin_approval_email
     send_admin_approval_email(username, name, email, lang)
+
+@shared_task
+def send_password_reset_email_task(to_email, uidb64, token, lang='ko'):
+    from backend.utils import send_password_reset_email
+    send_password_reset_email(to_email, uidb64, token, lang)

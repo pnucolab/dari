@@ -22,7 +22,7 @@ export async function load({ url, cookies }) {
     rtn.brand = brand;
 
     // Allow access to init, login, register, and privacy pages without authentication
-    if (url.pathname === '/init' || url.pathname === '/login' || url.pathname === '/register' || url.pathname === '/verify-email' || url.pathname === '/privacy') {
+    if (url.pathname === '/init' || url.pathname === '/login' || url.pathname === '/register' || url.pathname === '/verify-email' || url.pathname === '/privacy' || url.pathname === '/forgot-password' || url.pathname === '/reset-password') {
         // For init page, redirect to it if no users exist yet
         if (url.pathname !== '/init') {
             const response_me = await get('me', cookies);

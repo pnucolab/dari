@@ -7,5 +7,7 @@
     "email_not_verified": "Email not verified. Please check your email.",
     "pending_approval": "Your account is pending admin approval. You will be able to log in once approved.",
     "account_deactivated": "Your account has expired. Please contact the administrator.",
-    "register": "Register"
+    "register": "Register",
+    "forgot_password": "Forgot password",
+    "or": "or"
 }

@@ -1,0 +1,10 @@
+{
+    "title": "Forgot Password",
+    "description": "Enter your username and email address to receive a password reset link.",
+    "username": "Username",
+    "email": "Email",
+    "submit": "Send Reset Link",
+    "submitting": "Sending...",
+    "success": "If the information matches, a password reset link will be sent to your email. Please check your inbox.",
+    "back_to_login": "Back to login"
+}

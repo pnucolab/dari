@@ -1,0 +1,11 @@
+{
+    "title": "비밀번호 재설정",
+    "new_password": "새 비밀번호",
+    "confirm_password": "비밀번호 확인",
+    "submit": "비밀번호 변경",
+    "submitting": "변경 중...",
+    "success": "비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요.",
+    "failed": "비밀번호 재설정에 실패했습니다. 링크가 만료되었거나 유효하지 않습니다.",
+    "password_mismatch": "비밀번호가 일치하지 않습니다.",
+    "back_to_login": "로그인으로 돌아가기"
+}
