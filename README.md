@@ -22,7 +22,7 @@ A comprehensive IT infrastructure management platform that provides centralized 
 - **Backend**: Django + Django Ninja REST API (port 8080 internally)
 - **Database**: PostgreSQL 13
 - **LDAP**: OpenLDAP server for Linux authentication (port 636)
-- **VPN**: OpenVPN server with OTP authentication (port 1194/udp)
+- **VPN** *(optional)*: OpenVPN server with OTP authentication (port 1194/udp) — enabled via the `vpn` Compose profile
 - **Reverse Proxy**: Caddy server handling HTTPS and access control
 - **Task Queue**: Celery with RabbitMQ for async tasks
 
@@ -64,6 +64,8 @@ A comprehensive IT infrastructure management platform that provides centralized 
    - `SITE_DOMAIN`: Domain for the service (e.g., vpn.example.com)
    - `DB_USER`, `DB_PASSWORD`, `DB_NAME`: PostgreSQL credentials
    - `RABBITMQ_DEFAULT_USER`, `RABBITMQ_DEFAULT_PASS`: RabbitMQ credentials
+   - `COMPOSE_PROFILES`: optional services to run. Set to `vpn` to run the
+     OpenVPN server, or leave empty for an **LDAP-only deployment** (no VPN).
 
 3. **Start services**
 
@@ -237,9 +239,11 @@ Key endpoints in `/api/` (Django-Ninja; ~45 routes total):
 Cluster machines are managed by two installable Debian packages that pull their
 configuration from the server using a per-server API key:
 
-- **`compute-node/`** - Sets up LDAP client + autofs; periodically fetches
-  `/node/config` and regenerates automount maps for `/home` and allowed NFS
-  shares. Reconfigure with `dari-compute-setup`.
+- **`compute-node/`** - Sets up an LDAP client and (optionally) autofs;
+  periodically fetches `/node/config` and regenerates automount maps for
+  `/home` and allowed NFS shares. Autofs can be disabled at configure time for
+  an **LDAP-only node** (centralized accounts without NFS). Reconfigure with
+  `dari-compute-setup`.
 - **`storage-node/`** - Configures NFS exports based on `/storage/config`.
   Reconfigure with `dari-storage-setup`.
 

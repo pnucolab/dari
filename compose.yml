@@ -125,6 +125,9 @@ services:
 
   vpn:
     build: ./vpn
+    # Optional service. Enabled by the "vpn" Compose profile (COMPOSE_PROFILES).
+    # Omit the profile for an LDAP-only deployment.
+    profiles: ["vpn"]
     cap_add:
       - NET_ADMIN
     devices:

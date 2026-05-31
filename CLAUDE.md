@@ -15,7 +15,7 @@ The repository contains both the **central server** (a Docker Compose stack) and
 - **Backend**: Django + Django Ninja REST API (port 8080 internally)
 - **Database**: PostgreSQL 13
 - **LDAP**: OpenLDAP server for Linux authentication (port 636)
-- **VPN**: OpenVPN server with OTP authentication (port 1194/udp)
+- **VPN** (optional): OpenVPN server with OTP authentication (port 1194/udp) — gated behind the `vpn` Compose profile (`COMPOSE_PROFILES`); omit it for an LDAP-only deployment. (In dev/compose-dev.yml the VPN runs inside the backend container rather than as a separate service.)
 - **Reverse Proxy**: Caddy server handling HTTPS and access control
 - **Task Queue**: Celery with RabbitMQ for async tasks (user removal, deactivation)
 
@@ -235,7 +235,7 @@ Root layout server load function:
 Two Debian packages let cluster machines self-configure from the central server. Each is built with `dpkg-deb` via its `build.sh` and packaged under `pkg/` (debconf templates in `pkg/DEBIAN/`).
 
 ### [compute-node/](compute-node/)
-Installs an LDAP client (nslcd) and an autofs-based automounter. A systemd timer ([dari-update.timer](compute-node/pkg/lib/systemd/system/dari-update.timer)) periodically runs [update-config.sh](compute-node/pkg/usr/lib/dari/update-config.sh), which:
+Installs an LDAP client (nslcd) and an **optional** autofs-based automounter. The autofs/NFS half is toggled by the `dari-compute-node/enable_autofs` debconf boolean → `autofs = true|false` under `[nfs]` in the node config; set it to `false` for an **LDAP-only node** (postinst then skips/tears down the timer + autofs maps, and [update-config.sh](compute-node/pkg/usr/lib/dari/update-config.sh) early-exits). When enabled, a systemd timer ([dari-update.timer](compute-node/pkg/lib/systemd/system/dari-update.timer)) periodically runs [update-config.sh](compute-node/pkg/usr/lib/dari/update-config.sh), which:
 1. Reads [/etc/dari/compute-node.conf](compute-node/pkg/etc/dari/compute-node.conf) (`api_url`, `api_key`, NIC names, mount options)
 2. Calls `GET {api_url}/node/config?key={api_key}`
 3. Regenerates autofs maps (`/etc/auto.master.d/dari.autofs`, `auto.home`, per-share `auto.dari.*`) for `/home` (from the dari-home server) and each allowed NFS share, then reloads autofs
@@ -255,6 +255,7 @@ See [.env.example](.env.example) for all variables. Critical ones:
 - `LDAP_DOMAIN` - LDAP domain (e.g., "dari" becomes dc=dari)
 - `RABBITMQ_DEFAULT_USER/PASS` - RabbitMQ credentials for Celery
 - `SITE_DOMAIN` - Domain for Caddy HTTPS certificates
+- `COMPOSE_PROFILES` - Optional services to start; `vpn` runs the OpenVPN service, empty = LDAP-only (no VPN)
 
 **Note**: External authentication environment variables are no longer required. The system uses LDAP-based authentication with passwords managed directly in LDAP.
 

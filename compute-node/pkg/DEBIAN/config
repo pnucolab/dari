@@ -11,6 +11,9 @@ if [ -n "$IFACES" ]; then
     db_subst dari-compute-node/nfs_iface choices "$IFACES"
 fi
 
+db_input high dari-compute-node/enable_autofs || true
+db_go || true
+
 db_input high dari-compute-node/api_url || true
 db_go || true
 

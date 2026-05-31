@@ -15,6 +15,7 @@ case "$1" in
         db_get dari-compute-node/nfs_iface; NFS_IFACE="$RET"
         db_get dari-compute-node/ldap_uri; LDAP_URI="$RET"
         db_get dari-compute-node/allsmi_port; ALLSMI_PORT="$RET"
+        db_get dari-compute-node/enable_autofs; ENABLE_AUTOFS="$RET"
 
         # Auto-derive LDAP URI from API URL if not set
         if [ -z "$LDAP_URI" ] && [ -n "$API_URL" ]; then
@@ -38,6 +39,8 @@ base_dn = dc=dari
 tls_cacert = /etc/dari/ldap-ca.crt
 
 [nfs]
+# Set autofs = false for an LDAP-only node (no NFS automounting).
+autofs = ${ENABLE_AUTOFS:-true}
 poll_interval = 60
 mount_options = rw,soft,intr,timeo=30
 
@@ -95,19 +98,29 @@ NSLCD
             done
         fi
 
-        # Enable and start systemd timer
         systemctl daemon-reload
-        systemctl enable dari-update.timer
-        systemctl start dari-update.timer
 
-        # Run initial config update if configured
-        if [ -n "$API_URL" ] && [ -n "$API_KEY" ]; then
-            /usr/lib/dari/update-config.sh || true
+        if [ "$ENABLE_AUTOFS" = "true" ]; then
+            # Enable and start systemd timer + autofs
+            systemctl enable dari-update.timer
+            systemctl start dari-update.timer
+
+            # Run initial config update if configured
+            if [ -n "$API_URL" ] && [ -n "$API_KEY" ]; then
+                /usr/lib/dari/update-config.sh || true
+            fi
+
+            systemctl restart autofs 2>/dev/null || true
+        else
+            # LDAP-only node: ensure the automounter and its maps are inactive
+            systemctl stop dari-update.timer 2>/dev/null || true
+            systemctl disable dari-update.timer 2>/dev/null || true
+            rm -f /etc/auto.master.d/dari.autofs /etc/dari/auto.home /etc/dari/auto.dari.* 2>/dev/null || true
+            systemctl reload autofs 2>/dev/null || systemctl restart autofs 2>/dev/null || true
         fi
 
-        # Restart services
+        # Restart LDAP name service daemon
         systemctl restart nslcd 2>/dev/null || true
-        systemctl restart autofs 2>/dev/null || true
 
         echo ""
         echo "dari-compute-node configured successfully."

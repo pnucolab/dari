@@ -1,3 +1,13 @@
+Template: dari-compute-node/enable_autofs
+Type: boolean
+Default: true
+Description: Enable autofs/NFS automounting?
+ If enabled, this node mounts /dari-home and the configured NFS shares from the
+ DARI server via autofs, kept in sync by a systemd timer.
+ .
+ Choose no for an LDAP-only node (centralized user accounts without any NFS
+ automounting). The DARI API and NFS settings are ignored in that case.
+
 Template: dari-compute-node/api_url
 Type: string
 Description: DARI server API URL

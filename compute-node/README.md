@@ -4,7 +4,9 @@ A Debian package that automatically provisions compute nodes to integrate with t
 
 ## What It Does
 
-Upon installation, the package configures three core subsystems:
+Upon installation, the package configures up to three subsystems. **Only LDAP
+authentication is mandatory** — NFS automounting (autofs) is optional and can be
+turned off for an LDAP-only node (see [LDAP-only mode](#ldap-only-mode)).
 
 ### 1. LDAP Authentication
 
@@ -16,9 +18,11 @@ Configures the node to authenticate users against the DARI LDAP server so that a
 - Fetches the LDAP TLS CA certificate from `db/ldap_certs/ca.crt` on the DARI server for secure connections (LDAPS on port 636)
 - **Server-side filtering**: The DARI backend only returns LDAP entries for users belonging to the server's allowed groups. Compute nodes only see users that are authorized to access them, preventing enumeration of unrelated accounts
 
-### 2. NFS Shares via Automounter
+### 2. NFS Shares via Automounter *(optional)*
 
 Mounts NFS home directories and shared storage using **autofs**, with access controlled by DARI server settings. Home directories are automounted from the NFS server — `pam_mkhomedir` is intentionally not used.
+
+> Skip this subsystem entirely with [LDAP-only mode](#ldap-only-mode).
 
 - Installs and configures **autofs** for on-demand NFS mounting
 - At install time, migrates existing local home directories from `/home/` to `/home.local/` and updates `/etc/passwd` accordingly, freeing `/home/` for autofs
@@ -96,6 +100,9 @@ base_dn = dc=dari
 tls_cacert = /etc/dari/ldap-ca.crt
 
 [nfs]
+# Enable autofs/NFS automounting. Set to false for an LDAP-only node.
+autofs = true
+
 # Polling interval in seconds for NFS map updates
 poll_interval = 60
 
@@ -106,6 +113,21 @@ mount_options = rw,soft,intr,timeo=30
 # Port for all-smi API mode
 port = 9100
 ```
+
+## LDAP-only mode
+
+NFS automounting is optional. To install a node that only joins the LDAP
+directory for centralized accounts (no autofs, no NFS):
+
+- Answer **no** to "Enable autofs/NFS automounting?" during
+  `dpkg-reconfigure dari-compute-node`, **or**
+- Set `autofs = false` under `[nfs]` in `/etc/dari/compute-node.conf`.
+
+In this mode the `dari-update.timer` is stopped/disabled, any generated autofs
+maps are removed, and `update-config.sh` exits early — so the DARI API key and
+NFS settings are not needed. Only the LDAP URI and base DN are required. (The
+`autofs` and `nfs-common` packages remain installed as dependencies but are
+left idle.)
 
 ## Package Contents
 

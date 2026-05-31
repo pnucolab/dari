@@ -19,6 +19,12 @@ API_URL=$(parse_conf "api_url")
 API_KEY=$(parse_conf "api_key")
 NFS_IFACE=$(parse_conf "nfs_iface")
 MOUNT_OPTIONS=$(parse_conf "mount_options")
+AUTOFS_ENABLED=$(parse_conf "autofs")
+
+# LDAP-only node: autofs disabled, nothing to automount
+if [ "$AUTOFS_ENABLED" = "false" ]; then
+    exit 0
+fi
 
 if [ -z "$API_URL" ] || [ -z "$API_KEY" ]; then
     # Not configured yet, skip silently
