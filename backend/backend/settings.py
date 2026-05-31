@@ -141,7 +141,11 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-LDAP_ID = "cn=admin,dc=" + ',dc='.join(os.environ.get('LDAP_DOMAIN', 'dari').split('.'))
+# LDAP base DN is derived from LDAP_DOMAIN (e.g. "dari" -> "dc=dari",
+# "example.com" -> "dc=example,dc=com"). Everything else builds on top of it.
+LDAP_DOMAIN = os.environ.get('LDAP_DOMAIN', 'dari')
+LDAP_BASE_DN = "dc=" + ",dc=".join(LDAP_DOMAIN.split('.'))
+LDAP_ID = "cn=admin," + LDAP_BASE_DN
 LDAP_PW = os.environ.get('LDAP_ADMIN_PASSWORD', 'admin')
 
 CELERY_BROKER_URL = f'amqp://{os.environ.get("RABBITMQ_DEFAULT_USER", "guest")}:{os.environ.get("RABBITMQ_DEFAULT_PASS", "guest")}@rabbitmq:5672'

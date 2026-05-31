@@ -1,7 +1,11 @@
 #!/bin/bash
 set -ex
 
-# Configure LDAP authentication with environment variables
+# Configure LDAP authentication with environment variables.
+# Base DN is derived from LDAP_BASE_DN (preferred) or LDAP_DOMAIN, so it stays
+# in sync with the rest of the stack instead of being hardcoded to dc=dari.
+LDAP_BASE_DN="${LDAP_BASE_DN:-dc=$(echo "${LDAP_DOMAIN:-dari}" | sed 's/\./,dc=/g')}"
+sed -i "s|__BASE_DN__|${LDAP_BASE_DN}|g" /etc/openvpn/auth-ldap.conf
 sed -i "s/PUT_LDAP_PASSWORD_HERE/${LDAP_ADMIN_PASSWORD}/g" /etc/openvpn/auth-ldap.conf
 
 # Initialize easy-rsa if not already done

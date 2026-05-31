@@ -3,6 +3,8 @@ from dariauth.models import LinuxGroup, Default, Server
 
 import os
 import ssl
+import shutil
+import subprocess
 import requests
 import ldap
 import json
@@ -39,23 +41,30 @@ ctx.set_ciphers('DEFAULT')
 #     return rtn['data'][0]
 
 class LDAPOps:
-    def __init__(self, uri, id, pw):
+    def __init__(self, uri, id, pw, base_dn):
         self.uri = uri
         self.id = id
         self.pw = pw
+        self.base_dn = base_dn
         self.__conn = None
         def ensure_ou_exists(ou_name):
             try:
-                self.conn.search_s(f"ou={ou_name},dc=dari", ldap.SCOPE_BASE)
+                self.conn.search_s(f"ou={ou_name},{self.base_dn}", ldap.SCOPE_BASE)
             except ldap.NO_SUCH_OBJECT:
-                print(f"Cannot find ou={ou_name},dc=dari. Creating one...")
+                print(f"Cannot find ou={ou_name},{self.base_dn}. Creating one...")
                 attr = {
                     'objectClass': [b'organizationalUnit', b'top']
                 }
                 ldif = modlist.addModlist(attr)
-                self.conn.add_s(f"ou={ou_name},dc=dari", ldif)
+                self.conn.add_s(f"ou={ou_name},{self.base_dn}", ldif)
         ensure_ou_exists("users")
         ensure_ou_exists("groups")
+
+    def user_dn(self, uid):
+        return f"cn={uid},ou=users,{self.base_dn}"
+
+    def group_dn(self, cn):
+        return f"cn={cn},ou=groups,{self.base_dn}"
     
     @property
     def conn(self):
@@ -90,10 +99,10 @@ class LDAPOps:
             attr['userPassword'] = [passwd_hash.encode("utf-8")]
         ldif = modlist.addModlist(attr)
         try:
-            self.conn.delete_s("cn=%s,ou=users,dc=dari"%uid)
+            self.conn.delete_s(self.user_dn(uid))
         except ldap.NO_SUCH_OBJECT:
             pass
-        self.conn.add_s("cn=%s,ou=users,dc=dari"%uid, ldif)
+        self.conn.add_s(self.user_dn(uid), ldif)
 
     def modify_attr(self, cn, key, val):
         attr = [(
@@ -104,7 +113,7 @@ class LDAPOps:
         self.conn.modify_ext_s(cn, attr)
 
     def modify_user(self, uid, key, val):
-        self.modify_attr("cn=%s,ou=users,dc=dari"%uid, key, val)
+        self.modify_attr(self.user_dn(uid), key, val)
 
     def set_password(self, uid, password):
         """Set LDAP password for a user"""
@@ -120,13 +129,13 @@ class LDAPOps:
             'userPassword',
             passwd_hash.encode("utf-8")
         )]
-        self.conn.modify_ext_s("cn=%s,ou=users,dc=dari"%uid, attr)
+        self.conn.modify_ext_s(self.user_dn(uid), attr)
 
     def authenticate_user(self, uid, password):
         """Authenticate a user against LDAP"""
         try:
             conn = ldap.initialize(self.uri)
-            conn.bind("cn=%s,ou=users,dc=dari"%uid, password)
+            conn.bind(self.user_dn(uid), password)
             conn.unbind_s()
             return True
         except (ldap.INVALID_CREDENTIALS, ldap.NO_SUCH_OBJECT):
@@ -143,31 +152,31 @@ class LDAPOps:
             attr['memberUid'] = [uid.encode("utf-8") for uid in member_uid]
         ldif = modlist.addModlist(attr)
         try:
-            self.conn.delete_s("cn=%s,ou=groups,dc=dari"%cn)
+            self.conn.delete_s(self.group_dn(cn))
         except:
             pass
-        self.conn.add_s("cn=%s,ou=groups,dc=dari"%cn, ldif)
+        self.conn.add_s(self.group_dn(cn), ldif)
 
     def get_children_or_create_ou(self, groupname):
         try:
-            grp = self.conn.search_s("ou=%s,dc=dari"%groupname, ldap.SCOPE_ONELEVEL)
+            grp = self.conn.search_s(f"ou={groupname},{self.base_dn}", ldap.SCOPE_ONELEVEL)
         except:
             attr = {}
             attr['objectClass'] = [b'organizationalUnit', b'top']
             ldif = modlist.addModlist(attr)
-            self.conn.add_s("ou=%s,dc=dari"%groupname, ldif)
+            self.conn.add_s(f"ou={groupname},{self.base_dn}", ldif)
             grp = []
         return grp
 
     def delete_user(self, uid):
         try:
-            self.conn.delete_s("cn=%s,ou=users,dc=dari"%uid)
+            self.conn.delete_s(self.user_dn(uid))
         except ldap.NO_SUCH_OBJECT:
             pass
 
     def delete_group(self, cn):
         try:
-            self.conn.delete_s("cn=%s,ou=groups,dc=dari"%cn)
+            self.conn.delete_s(self.group_dn(cn))
         except ldap.NO_SUCH_OBJECT:
             pass
 
@@ -182,8 +191,11 @@ class LDAPOps:
             servers = Server.objects.prefetch_related('allowed_groups').all()
             acls = []
 
+            users_subtree = f'ou=users,{self.base_dn}'
+            groups_subtree = f'ou=groups,{self.base_dn}'
+
             # Rule 0: admin always gets write access, others break to next rule
-            acls.append(b'{0}to * by dn="cn=admin,dc=dari" write by * break')
+            acls.append(f'{{0}}to * by dn="cn=admin,{self.base_dn}" write by * break'.encode())
 
             # Rule 1: password access
             acls.append(b'{1}to attrs=userPassword by self write by anonymous auth by * none')
@@ -217,21 +229,21 @@ class LDAPOps:
                 if usernames:
                     uid_filter = '(|' + ''.join(f'(uid={u})' for u in sorted(usernames)) + ')'
                     by_clause = f'by peername.ip={srv.ip} read by * break'
-                    acls.append(f'{{{idx}}}to dn.subtree="ou=users,dc=dari" filter={uid_filter} {by_clause}'.encode())
+                    acls.append(f'{{{idx}}}to dn.subtree="{users_subtree}" filter={uid_filter} {by_clause}'.encode())
                     idx += 1
 
                 if group_names:
                     cn_filter = '(|' + ''.join(f'(cn={g})' for g in sorted(group_names)) + ')'
                     by_clause = f'by peername.ip={srv.ip} read by * break'
-                    acls.append(f'{{{idx}}}to dn.subtree="ou=groups,dc=dari" filter={cn_filter} {by_clause}'.encode())
+                    acls.append(f'{{{idx}}}to dn.subtree="{groups_subtree}" filter={cn_filter} {by_clause}'.encode())
                     idx += 1
 
             # Unrestricted nodes: full read access to users and groups
             if unrestricted_ips:
                 by_parts = ' '.join(f'by peername.ip={ip} read' for ip in sorted(unrestricted_ips))
-                acls.append(f'{{{idx}}}to dn.subtree="ou=users,dc=dari" {by_parts} by * break'.encode())
+                acls.append(f'{{{idx}}}to dn.subtree="{users_subtree}" {by_parts} by * break'.encode())
                 idx += 1
-                acls.append(f'{{{idx}}}to dn.subtree="ou=groups,dc=dari" {by_parts} by * break'.encode())
+                acls.append(f'{{{idx}}}to dn.subtree="{groups_subtree}" {by_parts} by * break'.encode())
                 idx += 1
 
             # Default deny
@@ -271,7 +283,21 @@ class LDAPOps:
             members = g.members.split(',')
             self.add_or_modify_group(g.name, g.gid, members)
 
-ldapops = LDAPOps("ldap://ldap", settings.LDAP_ID, settings.LDAP_PW)
+ldapops = LDAPOps("ldap://ldap", settings.LDAP_ID, settings.LDAP_PW, settings.LDAP_BASE_DN)
+
+HOME_BASE = "/dari-home"
+SKEL_DIR = "/etc/skel"
+
+def provision_home(username, uid, gid):
+    """Create a user's home directory from /etc/skel with correct ownership.
+
+    Uses Python/subprocess with argument lists instead of a shell so that
+    values interpolated into paths can never be interpreted as shell syntax.
+    """
+    home = os.path.join(HOME_BASE, username)
+    shutil.copytree(SKEL_DIR, home, dirs_exist_ok=True)
+    os.chmod(home, 0o750)
+    subprocess.run(['chown', '-R', f'{uid}:{gid}', home], check=True)
 
 def check_active_status(user):
     if user.is_active:

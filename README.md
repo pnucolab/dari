@@ -201,21 +201,49 @@ docker compose exec ldap ldapsearch -x -H ldap://localhost -b "ou=groups,dc=dari
 
 ## API Endpoints
 
-Key endpoints in `/api/`:
+Key endpoints in `/api/` (Django-Ninja; ~45 routes total):
 
+**Auth & account**
+- `POST /init` - First-run setup + first admin
 - `POST /register` - Register new user with Linux/LDAP account
-- `POST /login` - Authenticate via LDAP (regular) or Django (guest)
-- `POST /password` - Change user's LDAP password
+- `POST /login` / `GET /logout` - Authenticate via LDAP (regular) or Django (guest)
+- `GET /verify-email` - Confirm email (allauth)
+- `POST /forgot-password` / `POST /reset-password` - Email-based password reset
+- `POST /password` - Change own LDAP password
+- `GET /me` - Current user info
+
+**VPN**
 - `POST /qr` - Generate Google Authenticator QR for VPN OTP
 - `GET /vpn/profile` - Download OpenVPN client profile (public)
-- `GET /me` - Get current user info
-- `GET /users` - List users (admin)
-- `PATCH /user` - Update user attributes (admin)
-- `POST /guest` - Create guest user (admin)
-- `GET /groups` - List LDAP groups
-- `POST /group` - Create LDAP group (admin)
-- `PUT /group` - Update LDAP group
-- `POST /emailsend` - Send bulk email (admin)
+
+**Admin: users & groups**
+- `GET /users`, `GET /guests`, `GET /deactivated`
+- `PATCH /user` - Update user attributes / reset password / (de)activate
+- `POST /guest` - Create or update guest user
+- `GET /groups`, `POST|PUT|DELETE /group` - LDAP groups
+- `POST|DELETE /groupadmin`, `GET /groupadmins` - Delegated group admins
+- `POST /transfer` - Transfer a user's VPN/Linux/home assets
+- `POST /emailsend` - Send bulk email
+
+**Servers, NFS & node provisioning**
+- `GET /servers`, `POST|DELETE /server`, `GET /servers/stats`, `GET /myservers`
+- `GET /nfsshares`, `POST|DELETE /nfsshare`
+- `GET|POST /dari-home-server`
+- `GET /node/config?key=<api_key>` - Compute node config (auth by server API key)
+- `GET /storage/config?key=<api_key>` - Storage node config (auth by server API key)
+
+## Cluster Nodes
+
+Cluster machines are managed by two installable Debian packages that pull their
+configuration from the server using a per-server API key:
+
+- **`compute-node/`** - Sets up LDAP client + autofs; periodically fetches
+  `/node/config` and regenerates automount maps for `/home` and allowed NFS
+  shares. Reconfigure with `dari-compute-setup`.
+- **`storage-node/`** - Configures NFS exports based on `/storage/config`.
+  Reconfigure with `dari-storage-setup`.
+
+Build a package with its `build.sh` (produces a `.deb` via `dpkg-deb`).
 
 ## Configuration
 

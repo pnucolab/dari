@@ -5,21 +5,27 @@ from .models import User
 from backend.utils import ldapops
 
 import os
+import shutil
+import subprocess
 
 @shared_task
 def remove_users():
     for u in User.objects.filter(is_active=False, profile__date_removal__lt=timezone.now()):
         print(f"Removing user {u.profile.name}...")
-        if u.vpn:
+        if hasattr(u, 'vpn'):
             print(f"Removing VPN QR code of {u.username}...")
-            os.system(f"rm -f /etc/qr/{u.username}")
-        if u.linux:
+            qr = os.path.join('/etc/qr', u.username)
+            if os.path.exists(qr):
+                os.remove(qr)
+        if hasattr(u, 'linux'):
             print(f"Removing {u.linux.username} from LDAP...")
             ldapops.delete_user(u.linux.username)
-            print(f"Archiving /dari-home/{u.linux.username} to /mnt/archive/{u.linux.username}.tar.gz...")
-            os.system(f"tar -czf /mnt/archive/{u.linux.username}.tar.gz /dari-home/{u.linux.username}")
-            print(f"Removing /dari-home/{u.linux.username}...")
-            os.system(f"rm -rf /dari-home/{u.linux.username}")
+            home = os.path.join('/dari-home', u.linux.username)
+            archive = os.path.join('/mnt/archive', f'{u.linux.username}.tar.gz')
+            print(f"Archiving {home} to {archive}...")
+            subprocess.run(['tar', '-czf', archive, home], check=False)
+            print(f"Removing {home}...")
+            shutil.rmtree(home, ignore_errors=True)
         u.delete()
         print(f"User {u.profile.name} removed.")
 

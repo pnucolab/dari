@@ -11,12 +11,14 @@ from django.contrib.auth.models import User
 from dariauth.models import Default, Profile, VPNInfo, LinuxInfo, GuestInfo, Server, LinuxGroup, Log, NFSShare
 from django.db.models import Max
 from .schema import *
-from .utils import check_active_status, check_admin_status, check_groupadmin_status, validate, ldapops, get_serverstat, send_email, send_verification_email, add_ip, delete_ip
+from .utils import check_active_status, check_admin_status, check_groupadmin_status, validate, ldapops, get_serverstat, send_email, send_verification_email, add_ip, delete_ip, provision_home
 from .logging import logger
 
+from django.conf import settings
 from django.middleware.csrf import get_token
 import os
 import base64
+import shutil
 import subprocess
 import json
 from django.utils import timezone
@@ -118,9 +120,7 @@ def init(request):
         ldapops.add_user(linux.username, linux.uid, lg.gid, shell, password)
 
         # Create home directory
-        os.system(f'cp -r /etc/skel /dari-home/{username}')
-        os.system(f'chmod 750 /dari-home/{username}')
-        os.system(f'chown -R {uid}:{lg.gid} /dari-home/{username}')
+        provision_home(username, uid, lg.gid)
 
         logger.warning(f"System initialized. Admin user {username} created.")
         return {"success": True}
@@ -188,9 +188,7 @@ def login(request):
     if hasattr(user, 'linux') and not username.startswith('guest'):
         if not os.path.exists(f'/dari-home/{user.linux.username}'):
             ldapops.add_user(user.linux.username, user.linux.uid, user.linux.group.gid, user.linux.shell, password)
-            os.system(f'cp -r /etc/skel /dari-home/{user.linux.username}')
-            os.system(f'chmod 750 /dari-home/{user.linux.username}')
-            os.system(f'chown -R {user.linux.uid}:{user.linux.group.gid} /dari-home/{user.linux.username}')
+            provision_home(user.linux.username, user.linux.uid, user.linux.group.gid)
             logger.warning(f"Provisioned LDAP account and home directory for {username}")
 
     # Update expiry date on login (non-staff users expire 6 months after last login)
@@ -279,9 +277,7 @@ def register(request):
             user.is_superuser = True
             user.save()
             ldapops.add_user(linux.username, linux.uid, lg.gid, default_shell, password)
-            os.system(f'cp -r /etc/skel /dari-home/{username}')
-            os.system(f'chmod 750 /dari-home/{username}')
-            os.system(f'chown -R {uid}:{lg.gid} /dari-home/{username}')
+            provision_home(username, uid, lg.gid)
 
         # Email verification via allauth
         email_address = EmailAddress.objects.create(
@@ -708,21 +704,31 @@ def transfer(request, username_from: str, username_to: str):
         return api.create_response(request, None, status=404)
 
     if hasattr(user_from, 'vpn'):
+        qr_from = os.path.join('/etc/qr', user_from.username)
+        qr_to = os.path.join('/etc/qr', user_to.username)
         if hasattr(user_to, 'vpn'):
-            os.system(f'rm -f /etc/qr/{user_to.username}')
+            if os.path.exists(qr_to):
+                os.remove(qr_to)
             user_to.vpn.delete()
         vi = user_from.vpn
         vi.user = user_to
         vi.save()
-        os.system(f'mv /etc/qr/{user_from.username} /etc/qr/{user_to.username}')
-    
+        if os.path.exists(qr_from):
+            shutil.move(qr_from, qr_to)
+
     if hasattr(user_from, 'linux'):
         if hasattr(user_to, 'linux'):
-            backupdir = f'/dari-home/{user_from.linux.username}/{user_to.linux.username}-backup'
-            os.system(f'mkdir -p {backupdir}')
-            os.system(f'cp -r /dari-home/{user_to.linux.username}/* {backupdir}/')
-            os.system(f'chown -R {user_from.linux.username}:{user_from.linux.group.name} {backupdir}')
-            os.system(f'rm -fr /dari-home/{user_to.linux.username}')
+            from_home = os.path.join('/dari-home', user_from.linux.username)
+            to_home = os.path.join('/dari-home', user_to.linux.username)
+            backupdir = os.path.join(from_home, f'{user_to.linux.username}-backup')
+            os.makedirs(backupdir, exist_ok=True)
+            # Mirror the recipient's home into the backup dir (no shell glob)
+            subprocess.run(['cp', '-rT', to_home, backupdir], check=False)
+            subprocess.run(
+                ['chown', '-R', f'{user_from.linux.username}:{user_from.linux.group.name}', backupdir],
+                check=False,
+            )
+            shutil.rmtree(to_home, ignore_errors=True)
             user_to.linux.delete()
         li = user_from.linux
         li.user = user_to
@@ -783,8 +789,13 @@ def qr(request):
     user = request.user
     if hasattr(user, 'vpn'):
         return api.create_response(request, None, status=409)
-    secpath = f'/etc/qr/{user.username}'
-    os.system(f'rm -f {secpath} && google-authenticator -t -d -r3 -R30 -e0 -q -f -C -W -l test -s {secpath}')
+    secpath = os.path.join('/etc/qr', user.username)
+    if os.path.exists(secpath):
+        os.remove(secpath)
+    subprocess.run(
+        ['google-authenticator', '-t', '-d', '-r3', '-R30', '-e0', '-q', '-f', '-C', '-W', '-l', 'test', '-s', secpath],
+        check=True,
+    )
     qrsec = open(secpath).readline().rstrip()
     qrstr = "otpauth://totp/{}%40DARI?secret={}&issuer=DARI".format(user.username, qrsec)
     qrimg = base64.b64encode(subprocess.Popen(['qrencode', '-d150' , '-o-', qrstr], stdout=subprocess.PIPE).communicate()[0]).decode('ascii')
@@ -932,7 +943,7 @@ def node_config(request, key: str):
         ],
         "allowed_users": sorted(allowed_users),
         "allowed_groups": sorted(group_names),
-        "ldap_base_dn": "dc=" + os.environ.get('LDAP_DOMAIN', 'dari'),
+        "ldap_base_dn": settings.LDAP_BASE_DN,
         "home_server_ip": home_server_ip,
     }
 
