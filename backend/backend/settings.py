@@ -141,15 +141,22 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-LDAP_ID = "cn=admin,dc=" + ',dc='.join(os.environ.get('LDAP_DOMAIN', 'dari').split('.'))
+LDAP_BASE_DN = os.environ.get('LDAP_BASE_DN') or "dc=" + ',dc='.join(os.environ['LDAP_DOMAIN'].split('.'))
+LDAP_ID = "cn=admin," + LDAP_BASE_DN
 LDAP_PW = os.environ.get('LDAP_ADMIN_PASSWORD', 'admin')
 
 CELERY_BROKER_URL = f'amqp://{os.environ.get("RABBITMQ_DEFAULT_USER", "guest")}:{os.environ.get("RABBITMQ_DEFAULT_PASS", "guest")}@rabbitmq:5672'
-CELERY_RESULT_BACKEND = 'rpc://'
+# Task results are never read; the rpc:// backend declared a transient reply queue on every
+# .delay(), which RabbitMQ 4 rejects
+CELERY_TASK_IGNORE_RESULT = True
 CELERY_ACCEPT_CONTENT = ['application/json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+# RabbitMQ 4 rejects transient non-exclusive queues; declare the remote-control (pidbox)
+# and event (gossip) queues exclusive
+CELERY_CONTROL_QUEUE_EXCLUSIVE = True
+CELERY_EVENT_QUEUE_EXCLUSIVE = True
 
 LOG_FILE = os.environ.get('LOG_FILE', "/dev/null")
 

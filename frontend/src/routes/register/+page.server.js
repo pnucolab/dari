@@ -1,4 +1,4 @@
-import { get, post } from '$lib/fetch';
+import { get, post } from '#lib/fetch.js';
 import { fail } from '@sveltejs/kit';
 
 export async function load() {
@@ -18,32 +18,35 @@ export const actions = {
 
         // Validate passwords match
         if (password !== password_confirm) {
-            return fail(400, { error: 'Passwords do not match' });
+            return fail(400, { error: 'register.error_password_mismatch', error_i18n: true });
         }
 
         // Validate username format
         if (!/^[a-z][a-z0-9]{0,30}$/.test(username)) {
-            return fail(400, { error: 'Invalid username format. Must start with a letter, contain only lowercase letters and numbers, and be 1-31 characters long.' });
+            return fail(400, { error: 'register.error_username_format', error_i18n: true });
         }
 
         if (username.startsWith('guest')) {
-            return fail(400, { error: 'Username cannot start with "guest"' });
+            return fail(400, { error: 'register.error_username_guest', error_i18n: true });
         }
 
         const response = await post('register', formdata);
 
 		if (!response.ok || response.status !== 200) {
-            let errorMsg = 'Registration failed';
+            // keys of the `register` namespace, except for errors passed through from the backend
+            let errorMsg = 'register.error_failed';
+            let errorI18n = true;
             if (response.data?.error) {
                 if (response.data.error === 'User already exists') {
-                    errorMsg = 'Username already exists';
+                    errorMsg = 'register.error_user_exists';
                 } else if (response.data.error === 'Linux username already exists') {
-                    errorMsg = 'Linux username already exists';
+                    errorMsg = 'register.error_linux_exists';
                 } else {
                     errorMsg = response.data.error;
+                    errorI18n = false;
                 }
             }
-            return fail(response.status || 400, { error: errorMsg });
+            return fail(response.status || 400, { error: errorMsg, error_i18n: errorI18n });
 		}
 
         return { success: true };

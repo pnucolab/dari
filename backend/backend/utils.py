@@ -17,6 +17,8 @@ import ssl
 from django.utils import timezone
 from .logging import logger
 
+BASE_DN = settings.LDAP_BASE_DN
+
 ctx = ssl.create_default_context()
 ctx.set_ciphers('DEFAULT')
 
@@ -46,14 +48,14 @@ class LDAPOps:
         self.__conn = None
         def ensure_ou_exists(ou_name):
             try:
-                self.conn.search_s(f"ou={ou_name},dc=dari", ldap.SCOPE_BASE)
+                self.conn.search_s(f"ou={ou_name},{BASE_DN}", ldap.SCOPE_BASE)
             except ldap.NO_SUCH_OBJECT:
-                print(f"Cannot find ou={ou_name},dc=dari. Creating one...")
+                print(f"Cannot find ou={ou_name},{BASE_DN}. Creating one...")
                 attr = {
                     'objectClass': [b'organizationalUnit', b'top']
                 }
                 ldif = modlist.addModlist(attr)
-                self.conn.add_s(f"ou={ou_name},dc=dari", ldif)
+                self.conn.add_s(f"ou={ou_name},{BASE_DN}", ldif)
         ensure_ou_exists("users")
         ensure_ou_exists("groups")
     
@@ -90,10 +92,10 @@ class LDAPOps:
             attr['userPassword'] = [passwd_hash.encode("utf-8")]
         ldif = modlist.addModlist(attr)
         try:
-            self.conn.delete_s("cn=%s,ou=users,dc=dari"%uid)
+            self.conn.delete_s(f"cn={uid},ou=users,{BASE_DN}")
         except ldap.NO_SUCH_OBJECT:
             pass
-        self.conn.add_s("cn=%s,ou=users,dc=dari"%uid, ldif)
+        self.conn.add_s(f"cn={uid},ou=users,{BASE_DN}", ldif)
 
     def modify_attr(self, cn, key, val):
         attr = [(
@@ -104,7 +106,7 @@ class LDAPOps:
         self.conn.modify_ext_s(cn, attr)
 
     def modify_user(self, uid, key, val):
-        self.modify_attr("cn=%s,ou=users,dc=dari"%uid, key, val)
+        self.modify_attr(f"cn={uid},ou=users,{BASE_DN}", key, val)
 
     def set_password(self, uid, password):
         """Set LDAP password for a user"""
@@ -120,13 +122,13 @@ class LDAPOps:
             'userPassword',
             passwd_hash.encode("utf-8")
         )]
-        self.conn.modify_ext_s("cn=%s,ou=users,dc=dari"%uid, attr)
+        self.conn.modify_ext_s(f"cn={uid},ou=users,{BASE_DN}", attr)
 
     def authenticate_user(self, uid, password):
         """Authenticate a user against LDAP"""
         try:
             conn = ldap.initialize(self.uri)
-            conn.bind("cn=%s,ou=users,dc=dari"%uid, password)
+            conn.bind(f"cn={uid},ou=users,{BASE_DN}", password)
             conn.unbind_s()
             return True
         except (ldap.INVALID_CREDENTIALS, ldap.NO_SUCH_OBJECT):
@@ -143,31 +145,31 @@ class LDAPOps:
             attr['memberUid'] = [uid.encode("utf-8") for uid in member_uid]
         ldif = modlist.addModlist(attr)
         try:
-            self.conn.delete_s("cn=%s,ou=groups,dc=dari"%cn)
+            self.conn.delete_s(f"cn={cn},ou=groups,{BASE_DN}")
         except:
             pass
-        self.conn.add_s("cn=%s,ou=groups,dc=dari"%cn, ldif)
+        self.conn.add_s(f"cn={cn},ou=groups,{BASE_DN}", ldif)
 
     def get_children_or_create_ou(self, groupname):
         try:
-            grp = self.conn.search_s("ou=%s,dc=dari"%groupname, ldap.SCOPE_ONELEVEL)
+            grp = self.conn.search_s(f"ou={groupname},{BASE_DN}", ldap.SCOPE_ONELEVEL)
         except:
             attr = {}
             attr['objectClass'] = [b'organizationalUnit', b'top']
             ldif = modlist.addModlist(attr)
-            self.conn.add_s("ou=%s,dc=dari"%groupname, ldif)
+            self.conn.add_s(f"ou={groupname},{BASE_DN}", ldif)
             grp = []
         return grp
 
     def delete_user(self, uid):
         try:
-            self.conn.delete_s("cn=%s,ou=users,dc=dari"%uid)
+            self.conn.delete_s(f"cn={uid},ou=users,{BASE_DN}")
         except ldap.NO_SUCH_OBJECT:
             pass
 
     def delete_group(self, cn):
         try:
-            self.conn.delete_s("cn=%s,ou=groups,dc=dari"%cn)
+            self.conn.delete_s(f"cn={cn},ou=groups,{BASE_DN}")
         except ldap.NO_SUCH_OBJECT:
             pass
 
@@ -183,7 +185,7 @@ class LDAPOps:
             acls = []
 
             # Rule 0: admin always gets write access, others break to next rule
-            acls.append(b'{0}to * by dn="cn=admin,dc=dari" write by * break')
+            acls.append(f'{{0}}to * by dn="{settings.LDAP_ID}" write by * break'.encode())
 
             # Rule 1: password access
             acls.append(b'{1}to attrs=userPassword by self write by anonymous auth by * none')
@@ -217,21 +219,21 @@ class LDAPOps:
                 if usernames:
                     uid_filter = '(|' + ''.join(f'(uid={u})' for u in sorted(usernames)) + ')'
                     by_clause = f'by peername.ip={srv.ip} read by * break'
-                    acls.append(f'{{{idx}}}to dn.subtree="ou=users,dc=dari" filter={uid_filter} {by_clause}'.encode())
+                    acls.append(f'{{{idx}}}to dn.subtree="ou=users,{BASE_DN}" filter={uid_filter} {by_clause}'.encode())
                     idx += 1
 
                 if group_names:
                     cn_filter = '(|' + ''.join(f'(cn={g})' for g in sorted(group_names)) + ')'
                     by_clause = f'by peername.ip={srv.ip} read by * break'
-                    acls.append(f'{{{idx}}}to dn.subtree="ou=groups,dc=dari" filter={cn_filter} {by_clause}'.encode())
+                    acls.append(f'{{{idx}}}to dn.subtree="ou=groups,{BASE_DN}" filter={cn_filter} {by_clause}'.encode())
                     idx += 1
 
             # Unrestricted nodes: full read access to users and groups
             if unrestricted_ips:
                 by_parts = ' '.join(f'by peername.ip={ip} read' for ip in sorted(unrestricted_ips))
-                acls.append(f'{{{idx}}}to dn.subtree="ou=users,dc=dari" {by_parts} by * break'.encode())
+                acls.append(f'{{{idx}}}to dn.subtree="ou=users,{BASE_DN}" {by_parts} by * break'.encode())
                 idx += 1
-                acls.append(f'{{{idx}}}to dn.subtree="ou=groups,dc=dari" {by_parts} by * break'.encode())
+                acls.append(f'{{{idx}}}to dn.subtree="ou=groups,{BASE_DN}" {by_parts} by * break'.encode())
                 idx += 1
 
             # Default deny
@@ -307,27 +309,59 @@ def get_serverstat(server):
     
     return json.loads(rtn.text)
 
+SMTP_KEYS = ("smtp_host", "smtp_port", "smtp_user", "smtp_password",
+             "smtp_security", "smtp_from", "smtp_subject_prefix")
+SMTP_SECURITY = ("ssl", "starttls", "none")
+
+
+def smtp_config():
+    """SMTP settings saved on the admin page; the EMAIL_* values from .env are the defaults."""
+    cfg = {
+        "smtp_host": settings.EMAIL_HOST,
+        "smtp_port": str(settings.EMAIL_PORT),
+        "smtp_user": settings.EMAIL_HOST_USER,
+        "smtp_password": settings.EMAIL_HOST_PASSWORD,
+        "smtp_security": "ssl" if settings.EMAIL_USE_SSL else "starttls",
+        "smtp_from": settings.DEFAULT_FROM_EMAIL,
+        "smtp_subject_prefix": settings.EMAIL_SUBJECT_PREFIX,
+    }
+    cfg.update({d.key: d.value for d in Default.objects.filter(key__in=SMTP_KEYS)})
+    return cfg
+
+
+def email_connection(cfg):
+    from django.core.mail import get_connection
+    return get_connection(
+        backend="django.core.mail.backends.smtp.EmailBackend",
+        host=cfg["smtp_host"], port=int(cfg["smtp_port"] or 0),
+        username=cfg["smtp_user"], password=cfg["smtp_password"],
+        use_ssl=cfg["smtp_security"] == "ssl", use_tls=cfg["smtp_security"] == "starttls",
+        timeout=15,
+    )
+
+
 def send_email(subject, body):
     """Send email to all active users with email addresses using Django email settings."""
     from django.core.mail import send_mass_mail
 
-    prefix = settings.EMAIL_SUBJECT_PREFIX
+    cfg = smtp_config()
+    prefix = cfg["smtp_subject_prefix"]
     full_subject = f"{prefix} {subject}" if prefix else subject
 
     recv_emails = [u.email for u in User.objects.exclude(email__isnull=True).exclude(email__exact='').filter(is_active=True)]
-    messages = [(full_subject, body, settings.DEFAULT_FROM_EMAIL, [email]) for email in recv_emails]
-    send_mass_mail(messages, fail_silently=False)
+    messages = [(full_subject, body, cfg["smtp_from"], [email]) for email in recv_emails]
+    send_mass_mail(messages, fail_silently=False, connection=email_connection(cfg))
 
 def send_verification_email(to_email, key, lang='ko'):
     """Send email verification link to a user."""
-    logger.warning("Test")
     from django.core.mail import send_mail
 
     domain = os.environ.get('SITE_DOMAIN', 'localhost:8080')
     scheme = 'https' if not settings.DEBUG else 'http'
     verify_url = f"{scheme}://{domain}/verify-email?key={key}"
 
-    prefix = settings.EMAIL_SUBJECT_PREFIX
+    cfg = smtp_config()
+    prefix = cfg["smtp_subject_prefix"]
 
     if lang == 'ko':
         subject_text = "이메일 인증"
@@ -338,7 +372,7 @@ def send_verification_email(to_email, key, lang='ko'):
 
     subject = f"{prefix} {subject_text}" if prefix else subject_text
     logger.warning(subject)
-    send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [to_email])
+    send_mail(subject, body, cfg["smtp_from"], [to_email], connection=email_connection(cfg))
 
 def send_password_reset_email(to_email, uidb64, token, lang='ko'):
     """Send password reset link to a user."""
@@ -348,7 +382,8 @@ def send_password_reset_email(to_email, uidb64, token, lang='ko'):
     scheme = 'https' if not settings.DEBUG else 'http'
     reset_url = f"{scheme}://{domain}/reset-password?uid={uidb64}&token={token}"
 
-    prefix = settings.EMAIL_SUBJECT_PREFIX
+    cfg = smtp_config()
+    prefix = cfg["smtp_subject_prefix"]
 
     if lang == 'ko':
         subject_text = "비밀번호 재설정"
@@ -358,7 +393,7 @@ def send_password_reset_email(to_email, uidb64, token, lang='ko'):
         body = f"Please click the link below to reset your password:\n\n{reset_url}\n\nIf you did not request this, please ignore this email."
 
     subject = f"{prefix} {subject_text}" if prefix else subject_text
-    send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [to_email])
+    send_mail(subject, body, cfg["smtp_from"], [to_email], connection=email_connection(cfg))
 
 def send_admin_approval_email(username, name, email, lang='ko'):
     """Send notification to all admin users that a new user has registered and needs approval."""
@@ -368,7 +403,8 @@ def send_admin_approval_email(username, name, email, lang='ko'):
     scheme = 'https' if not settings.DEBUG else 'http'
     admin_url = f"{scheme}://{domain}/admin/users"
 
-    prefix = settings.EMAIL_SUBJECT_PREFIX
+    cfg = smtp_config()
+    prefix = cfg["smtp_subject_prefix"]
 
     if lang == 'ko':
         subject_text = "새 사용자 승인 요청"
@@ -397,7 +433,7 @@ def send_admin_approval_email(username, name, email, lang='ko'):
     ]
 
     for admin_email in admin_emails:
-        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [admin_email])
+        send_mail(subject, body, cfg["smtp_from"], [admin_email], connection=email_connection(cfg))
 
 def add_ip(ip):
     import yaml

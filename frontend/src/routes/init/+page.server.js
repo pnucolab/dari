@@ -1,4 +1,4 @@
-import { post, get } from '$lib/fetch';
+import { post, get } from '#lib/fetch.js';
 import { fail } from '@sveltejs/kit';
 import { redirect } from '@sveltejs/kit';
 
@@ -43,7 +43,7 @@ export const actions = {
             if (logoFile.size > 0) {
                 if (logoFile.type !== 'image/png' && logoFile.type !== 'image/jpeg' &&
                     logoFile.type !== 'image/gif' && logoFile.type !== 'image/svg+xml') {
-                    return fail(422, { error: '로고 파일 형식이 올바르지 않습니다' });
+                    return fail(422, { error: 'init.error_logo', error_i18n: true });
                 }
                 const arrayBuffer = await logoFile.arrayBuffer();
                 const logoData = Buffer.from(arrayBuffer).toString('base64');
@@ -58,6 +58,7 @@ export const actions = {
         payload.append('email', email);
         payload.append('password', password);
         payload.append('sitename', formdata.get('sitename') || '');
+        payload.append('sitename_en', formdata.get('sitename_en') || '');
         payload.append('gid', formdata.get('gid') || '');
         payload.append('shell', formdata.get('shell') || '');
         payload.append('logo', logo);
@@ -65,11 +66,14 @@ export const actions = {
 
         const init_response = await post('init', payload);
         if (!init_response.ok || init_response.status !== 200) {
-            let errorMsg = '초기 설정에 실패했습니다';
+            // a key of the `init` namespace, unless the backend sent its own error
+            let errorMsg = 'init.error_failed';
+            let errorI18n = true;
             if (init_response.data?.error) {
                 errorMsg = init_response.data.error;
+                errorI18n = false;
             }
-            return fail(init_response.status || 400, { error: errorMsg });
+            return fail(init_response.status || 400, { error: errorMsg, error_i18n: errorI18n });
         }
 
         // Auto-login

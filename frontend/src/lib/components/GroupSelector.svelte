@@ -1,10 +1,12 @@
 <script>
     import MultiSelect from './MultiSelect.svelte';
+    import { get } from '#lib/translations.js';
 
-    export let groups = [];
-    export let selected = [];
+    let { groups = [], selected = $bindable([]) } = $props();
 
-    $: items = groups.map(g => ({ name: g.name, value: g.name }));
+    const i18n = get();
+
+    let items = $derived(groups.map(g => ({ name: g.name, value: g.name })));
 </script>
 
 <MultiSelect
@@ -12,6 +14,6 @@
     bind:selected
     labelKey="name"
     valueKey="value"
-    placeholder="그룹 검색..."
-    emptyText="그룹이 없습니다."
+    placeholder={i18n.t('common.search_group')}
+    emptyText={i18n.t('common.no_groups')}
 />

@@ -13,22 +13,27 @@
         Button,
         Alert,
         Select,
-    } from 'flowbite-svelte';
-    import { PlusOutline, TrashBinOutline } from 'flowbite-svelte-icons';
-    import GroupSelector from '$lib/components/GroupSelector.svelte';
-    import MultiSelect from '$lib/components/MultiSelect.svelte';
+        Icon,
+    } from '#lib/components/ui/index.js';
+    import GroupSelector from '#lib/components/GroupSelector.svelte';
+    import MultiSelect from '#lib/components/MultiSelect.svelte';
+    import { get } from '#lib/translations.js';
 
     import { onMount, onDestroy } from 'svelte';
     import { enhance } from '$app/forms';
 
-    let shares = null;
-    let servers = null;
-    let allGroups = [];
-    let dariHomeServer = null;
+    let { form } = $props();
+
+    const i18n = get();
+
+    let shares = $state(null);
+    let servers = $state(null);
+    let allGroups = $state([]);
+    let dariHomeServer = $state(null);
     let refreshInterval;
 
-    let selectedAllowedServers = [];
-    let selectedAllowedGroups = [];
+    let selectedAllowedServers = $state([]);
+    let selectedAllowedGroups = $state([]);
 
     onMount(() => {
         refreshShares();
@@ -102,15 +107,13 @@
         refreshDariHome();
     }
 
-    let shareModal = false;
+    let shareModal = $state(false);
 
     function openShareModal() {
         selectedAllowedServers = [];
         selectedAllowedGroups = [];
         shareModal = true;
     }
-
-    export let form;
 
     function handleSubmit() {
         return async ({ result }) => {
@@ -121,25 +124,25 @@
         };
     }
 
-    $: computeServers = servers ? servers.filter(s => s.server_type === 'compute') : [];
-    $: storageServers = servers ? servers.filter(s => s.server_type === 'storage') : [];
-    $: computeServerItems = computeServers.map(s => ({ name: `${s.domainname} (${s.ip})`, value: s.domainname }));
+    let computeServers = $derived(servers ? servers.filter(s => s.server_type === 'compute') : []);
+    let storageServers = $derived(servers ? servers.filter(s => s.server_type === 'storage') : []);
+    let computeServerItems = $derived(computeServers.map(s => ({ name: `${s.domainname} (${s.ip})`, value: s.domainname })));
 </script>
 
-<form method="POST" action="?/create" use:enhance={handleSubmit}>
-    <input type="hidden" name="allowed_groups" value={selectedAllowedGroups.join(', ')} />
-    <input type="hidden" name="allowed_servers" value={selectedAllowedServers.join(', ')} />
-    <Modal bind:open={shareModal} size="md" autoclose={false} class="w-full">
-        <h3 class="mb-4 text-xl font-medium text-gray-900 dark:text-white">NFS 공유 추가</h3>
+<Modal bind:open={shareModal} size="md" autoclose={false} class="w-full">
+    <form method="POST" action="?/create" id="share-form" class="space-y-4" use:enhance={handleSubmit}>
+        <input type="hidden" name="allowed_groups" value={selectedAllowedGroups.join(', ')} />
+        <input type="hidden" name="allowed_servers" value={selectedAllowedServers.join(', ')} />
+        <h3 class="mb-4 text-xl font-medium text-gray-900 dark:text-white">{i18n.t('admin.nfs.add_title')}</h3>
         <div class="flex gap-3 mb-3">
             <Label class="w-full space-y-2">
-                <span>이름</span>
+                <span>{i18n.t('user.name')}</span>
                 <Input type="text" name="name" placeholder="shared-data" />
             </Label>
             <Label class="w-full space-y-2">
-                <span>스토리지 서버</span>
+                <span>{i18n.t('admin.nfs.storage_server')}</span>
                 <Select name="server_ip">
-                    <option value="" disabled selected>서버 선택</option>
+                    <option value="" disabled selected>{i18n.t('admin.nfs.select_server')}</option>
                     {#each storageServers as srv}
                     <option value={srv.ip}>{srv.domainname} ({srv.ip})</option>
                     {/each}
@@ -148,23 +151,23 @@
         </div>
         <div class="flex gap-3 mb-3">
             <Label class="w-full space-y-2">
-                <span>내보내기 경로</span>
+                <span>{i18n.t('admin.nfs.export_path')}</span>
                 <Input type="text" name="export_path" placeholder="/export/data" />
             </Label>
             <Label class="w-full space-y-2">
-                <span>마운트 경로</span>
+                <span>{i18n.t('admin.nfs.mount_point')}</span>
                 <Input type="text" name="mount_point" placeholder="/mnt/data" />
             </Label>
         </div>
         <div class="mb-3">
             <Label class="w-full space-y-2">
-                <span>허용 그룹 (비워두면 전체 허용)</span>
+                <span>{i18n.t('admin.allowed_groups_hint')}</span>
                 <GroupSelector groups={allGroups} bind:selected={selectedAllowedGroups} />
             </Label>
         </div>
         <div class="mb-5">
             <Label class="space-y-2">
-                <span>허용 서버 (비워두면 전체 허용)</span>
+                <span>{i18n.t('admin.nfs.allowed_servers_hint')}</span>
             </Label>
             <div class="mt-2">
                 <MultiSelect
@@ -172,31 +175,31 @@
                     bind:selected={selectedAllowedServers}
                     labelKey="name"
                     valueKey="value"
-                    placeholder="서버 검색..."
-                    emptyText="등록된 컴퓨트 서버가 없습니다."
+                    placeholder={i18n.t('admin.nfs.search_server')}
+                    emptyText={i18n.t('admin.servers.no_compute')}
                 />
             </div>
             {#if form?.error}
-            <Alert color="red" dismissable>NFS 공유를 설정하는 데 실패하였습니다.</Alert>
+            <Alert color="red" dismissable>{i18n.t('admin.nfs.error')}</Alert>
             {/if}
         </div>
-        <svelte:fragment slot="footer">
-            <Button color="blue" type="submit">추가</Button>
-            <Button color="alternative" on:click={() => shareModal = false}>취소</Button>
-        </svelte:fragment>
-    </Modal>
-</form>
+    </form>
+    {#snippet footer()}
+        <Button color="blue" type="submit" form="share-form">{i18n.t('common.add')}</Button>
+        <Button color="alternative" onclick={() => shareModal = false}>{i18n.t('common.cancel')}</Button>
+    {/snippet}
+</Modal>
 
 <div class="grid grid-cols-1 gap-4 p-4 w-full">
-    <Card size='none'>
+    <Card size="xl" class="p-4 sm:p-6 text-gray-500 dark:text-gray-400">
         <div class="flex justify-between items-center mb-5">
-            <h5 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">홈 디렉토리 설정</h5>
+            <h5 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{i18n.t('admin.nfs.home_title')}</h5>
         </div>
         <div class="flex items-center gap-3">
             <Label class="space-y-2 w-full max-w-md">
-                <span>홈 디렉토리 서버 (dari-home 내보내기)</span>
-                <Select on:change={setDariHome} value={dariHomeServer || ''}>
-                    <option value="">선택 안 함</option>
+                <span>{i18n.t('admin.nfs.home_server')}</span>
+                <Select onchange={setDariHome} value={dariHomeServer || ''}>
+                    <option value="">{i18n.t('admin.nfs.none')}</option>
                     {#each storageServers as srv}
                     <option value={srv.pk}>{srv.domainname} ({srv.ip})</option>
                     {/each}
@@ -204,29 +207,29 @@
             </Label>
         </div>
     </Card>
-    <Card size='none'>
+    <Card size="xl" class="p-4 sm:p-6 text-gray-500 dark:text-gray-400">
         <div class="flex justify-between">
-            <h5 class="mb-5 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">NFS 공유 관리</h5>
-            <Button class="h-10 w-10" size="xs" color="blue" on:click={openShareModal}><PlusOutline /></Button>
+            <h5 class="mb-5 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{i18n.t('admin.nfs.title')}</h5>
+            <Button class="h-10 w-10" size="xs" color="blue" onclick={openShareModal}><Icon name="plus" /></Button>
         </div>
         <Table class="text-center">
             <TableHead>
-                <TableHeadCell>이름</TableHeadCell>
-                <TableHeadCell>NFS 서버 IP</TableHeadCell>
-                <TableHeadCell>내보내기 경로</TableHeadCell>
-                <TableHeadCell>마운트 경로</TableHeadCell>
-                <TableHeadCell>허용 그룹</TableHeadCell>
-                <TableHeadCell>허용 서버</TableHeadCell>
-                <TableHeadCell width="100px">작업</TableHeadCell>
+                <TableHeadCell>{i18n.t('user.name')}</TableHeadCell>
+                <TableHeadCell>{i18n.t('admin.nfs.server_ip')}</TableHeadCell>
+                <TableHeadCell>{i18n.t('admin.nfs.export_path')}</TableHeadCell>
+                <TableHeadCell>{i18n.t('admin.nfs.mount_point')}</TableHeadCell>
+                <TableHeadCell>{i18n.t('admin.allowed_groups')}</TableHeadCell>
+                <TableHeadCell>{i18n.t('admin.nfs.allowed_servers')}</TableHeadCell>
+                <TableHeadCell width="100px">{i18n.t('common.actions')}</TableHeadCell>
             </TableHead>
-            <TableBody tableBodyClass="divide-y">
+            <TableBody class="divide-y">
                 {#if !shares}
                 <TableBodyRow>
-                    <TableBodyCell colspan="7" class="text-center">NFS 공유 정보를 불러오는 중입니다...</TableBodyCell>
+                    <TableBodyCell colspan="7" class="text-center">{i18n.t('admin.nfs.loading')}</TableBodyCell>
                 </TableBodyRow>
                 {:else if shares.length === 0}
                 <TableBodyRow>
-                    <TableBodyCell colspan="7" class="text-center">등록된 NFS 공유가 없습니다.</TableBodyCell>
+                    <TableBodyCell colspan="7" class="text-center">{i18n.t('admin.nfs.no_shares')}</TableBodyCell>
                 </TableBodyRow>
                 {:else}
                 {#each shares as share}
@@ -235,10 +238,10 @@
                     <TableBodyCell>{share.server_ip}</TableBodyCell>
                     <TableBodyCell><code>{share.export_path}</code></TableBodyCell>
                     <TableBodyCell><code>{share.mount_point}</code></TableBodyCell>
-                    <TableBodyCell>{share.allowed_groups && share.allowed_groups.length > 0 ? share.allowed_groups.join(', ') : '전체'}</TableBodyCell>
-                    <TableBodyCell>{share.allowed_servers && share.allowed_servers.length > 0 ? share.allowed_servers.join(', ') : '전체'}</TableBodyCell>
+                    <TableBodyCell>{share.allowed_groups && share.allowed_groups.length > 0 ? share.allowed_groups.join(', ') : i18n.t('common.all')}</TableBodyCell>
+                    <TableBodyCell>{share.allowed_servers && share.allowed_servers.length > 0 ? share.allowed_servers.join(', ') : i18n.t('common.all')}</TableBodyCell>
                     <TableBodyCell>
-                        <Button outline size="sm" color={null} on:click={() => deleteShare(share.pk)}><TrashBinOutline class="w-4 h-4" /></Button>
+                        <Button size="sm" color="alternative" class="border-0" onclick={() => deleteShare(share.pk)}><Icon name="trash-bin" class="w-4 h-4" /></Button>
                     </TableBodyCell>
                 </TableBodyRow>
                 {/each}

@@ -1,3 +1,13 @@
-FROM osixia/openldap:1.5.0
+FROM alpine:3
 
-COPY 02-security.ldif /container/service/slapd/assets/config/bootstrap/ldif/02-security.ldif
+RUN apk upgrade --no-cache \
+    && apk add --no-cache bash openssl gettext-envsubst \
+       openldap openldap-back-mdb openldap-clients \
+    && rm -rf /etc/openldap/slapd.d/* /var/lib/openldap/openldap-data/*
+
+COPY bootstrap /etc/openldap/bootstrap
+COPY start.sh /start.sh
+
+EXPOSE 389 636
+
+CMD ["bash", "/start.sh"]

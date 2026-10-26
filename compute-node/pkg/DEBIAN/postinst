@@ -22,6 +22,12 @@ case "$1" in
             LDAP_URI="ldaps://${LDAP_HOST}"
         fi
 
+        # LDAP base DN from the DARI server; update-config.sh keeps it in sync later
+        LDAP_BASE_DN=""
+        if [ -n "$API_URL" ] && [ -n "$API_KEY" ]; then
+            LDAP_BASE_DN=$(curl -sSf "${API_URL}/node/config?key=${API_KEY}" 2>/dev/null | jq -r '.ldap_base_dn // empty' || true)
+        fi
+
         # Write configuration file
         cat > "$DARI_CONF" <<EOF
 [network]
@@ -34,7 +40,7 @@ api_key = ${API_KEY}
 
 [ldap]
 uri = ${LDAP_URI}
-base_dn = dc=dari
+base_dn = ${LDAP_BASE_DN}
 tls_cacert = /etc/dari/ldap-ca.crt
 
 [nfs]
@@ -53,7 +59,7 @@ uid nslcd
 gid nslcd
 
 uri ${LDAP_URI}
-base dc=dari
+${LDAP_BASE_DN:+base ${LDAP_BASE_DN}}
 
 ssl on
 tls_reqcert allow

@@ -1,6 +1,5 @@
-import { post, get } from '$lib/fetch';
+import { post, get } from '#lib/fetch.js';
 import { fail } from '@sveltejs/kit';
-import { env } from '$env/dynamic/private';
 
 /** @type {import('./$types').PageServerLoad} */
 export async function load({ url, cookies }) {

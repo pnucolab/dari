@@ -1,7 +1,7 @@
-import { get } from '$lib/fetch';
+import { get } from '#lib/fetch.js';
 import { redirect } from '@sveltejs/kit';
 import { fail } from '@sveltejs/kit';
-import { post } from '$lib/fetch';
+import { post } from '#lib/fetch.js';
 
 /** @type {import('./$types').PageServerLoad} */
 export async function load({ cookies }) {

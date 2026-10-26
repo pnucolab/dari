@@ -1,18 +1,14 @@
-import { get } from '$lib/fetch';
-import { loadTranslations } from '$lib/translations';
+import { get } from '#lib/fetch.js';
+import { load as i18nLoad } from '#lib/translations.js';
 import { redirect, error } from '@sveltejs/kit';
 import { fail } from '@sveltejs/kit';
 
 /** @type {import('./$types').LayoutServerLoad} */
-export async function load({ url, cookies }) {
-    let rtn = {};
+export async function load(event) {
+    const { url, cookies } = event;
 
-    const { pathname } = url;
-
-    let locale = (cookies.get('lang') || 'ko').toLowerCase();
-    await loadTranslations(locale, pathname);
-
-    rtn.i18n = { locale, route: pathname };
+    // loads the translations for the `lang` cookie and the current route
+    let rtn = { ...(await i18nLoad(event)) };
 
     const response_brand = await get('brand', cookies);
     let brand = { sitename: null, logo: null };

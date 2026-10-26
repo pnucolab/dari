@@ -1,0 +1,52 @@
+dn: cn=config
+objectClass: olcGlobal
+cn: config
+olcPidFile: /run/openldap/slapd.pid
+olcArgsFile: /run/openldap/slapd.args
+olcLogLevel: stats
+olcTLSCACertificateFile: /etc/openldap/certs/ca.crt
+olcTLSCertificateFile: /etc/openldap/certs/ldap.crt
+olcTLSCertificateKeyFile: /etc/openldap/certs/ldap.key
+olcTLSVerifyClient: ${LDAP_TLS_VERIFY_CLIENT}
+olcTLSProtocolMin: 3.3
+
+dn: cn=module{0},cn=config
+objectClass: olcModuleList
+cn: module{0}
+olcModulePath: /usr/lib/openldap
+olcModuleLoad: {0}back_mdb.so
+
+dn: cn=schema,cn=config
+objectClass: olcSchemaConfig
+cn: schema
+#SCHEMAS
+
+dn: olcDatabase={-1}frontend,cn=config
+objectClass: olcDatabaseConfig
+objectClass: olcFrontendConfig
+olcDatabase: {-1}frontend
+olcSizeLimit: 500
+
+dn: olcDatabase={0}config,cn=config
+objectClass: olcDatabaseConfig
+olcDatabase: {0}config
+olcRootDN: cn=admin,cn=config
+olcRootPW: ${LDAP_CONFIG_HASH}
+olcAccess: {0}to * by dn.exact=gidNumber=0+uidNumber=0,cn=peercred,cn=external,cn=auth manage by * break
+
+dn: olcDatabase={1}mdb,cn=config
+objectClass: olcDatabaseConfig
+objectClass: olcMdbConfig
+olcDatabase: {1}mdb
+olcDbDirectory: /var/lib/openldap/openldap-data
+olcSuffix: ${LDAP_BASE_DN}
+olcRootDN: cn=admin,${LDAP_BASE_DN}
+olcRootPW: ${LDAP_ADMIN_HASH}
+olcDbMaxSize: 1073741824
+olcDbIndex: objectClass eq
+olcDbIndex: cn,uid eq
+olcDbIndex: uidNumber,gidNumber eq
+olcDbIndex: memberUid eq
+olcAccess: {0}to * by dn.exact=gidNumber=0+uidNumber=0,cn=peercred,cn=external,cn=auth manage by * break
+olcAccess: {1}to attrs=userPassword,shadowLastChange by self write by dn="cn=admin,${LDAP_BASE_DN}" write by anonymous auth by * none
+olcAccess: {2}to * by self read by dn="cn=admin,${LDAP_BASE_DN}" write by * none

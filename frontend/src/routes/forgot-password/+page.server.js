@@ -1,4 +1,4 @@
-import { post } from '$lib/fetch';
+import { post } from '#lib/fetch.js';
 import { fail } from '@sveltejs/kit';
 
 /** @type {import('./$types').Actions} */

@@ -1,12 +1,4 @@
-import { setLocale, setRoute } from '$lib/translations';
+import { load as i18nLoad } from '#lib/translations.js';
 
 /** @type {import('./$types').LayoutLoad} */
-export async function load({ data }) {
-    if (data && data.i18n) {
-        const { locale, route } = data.i18n;
-
-        await setRoute(route);
-        await setLocale(locale);
-    }
-    return {...data};
-}
+export const load = i18nLoad;

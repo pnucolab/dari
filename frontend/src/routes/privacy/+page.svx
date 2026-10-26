@@ -1,22 +1,24 @@
 <script>
-  import { Button } from 'flowbite-svelte';
-  import { t } from '$lib/translations';
+  import { Button } from '#lib/components/ui/index.js';
+  import { get } from '#lib/translations.js';
+
+  const i18n = get();
 </script>
 
 <main class="p-10">
 
-# {$t(\`common.consent.title\`)}
+# {i18n.t(\`common.consent.title\`)}
 
-{$t(\`common.consent.content_1\`)}
+{i18n.t(\`common.consent.content_1\`)}
 
-- {$t(\`common.consent.content_2\`)}
-  - {$t(\`common.consent.content_3\`)}
-  - {$t(\`common.consent.content_4\`)}
-- {$t(\`common.consent.content_5\`)}
-  - {$t(\`common.consent.content_6\`)}
+- {i18n.t(\`common.consent.content_2\`)}
+  - {i18n.t(\`common.consent.content_3\`)}
+  - {i18n.t(\`common.consent.content_4\`)}
+- {i18n.t(\`common.consent.content_5\`)}
+  - {i18n.t(\`common.consent.content_6\`)}
 
-{$t(\`common.consent.content_7\`)}
+{i18n.t(\`common.consent.content_7\`)}
 
-<Button on:click={() => history.back()} class="mt-10" size="lg" color="blue">{$t('common.back')}</Button>
+<Button onclick={() => history.back()} class="mt-10" size="lg" color="blue">{i18n.t('common.back')}</Button>
 
 </main>

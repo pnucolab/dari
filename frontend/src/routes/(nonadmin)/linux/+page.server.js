@@ -1,4 +1,4 @@
-import { get } from '$lib/fetch';
+import { get } from '#lib/fetch.js';
 
 /** @type {import('./$types').PageServerLoad} */
 export async function load({ cookies }) {

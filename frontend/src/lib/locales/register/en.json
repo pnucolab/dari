@@ -15,5 +15,13 @@
     "success": "Registration complete. Please verify your email. You will be able to log in once an admin approves your account.",
     "verify_success": "Email verified successfully. Please log in.",
     "verify_failed": "Email verification failed. The link may have expired or is invalid.",
-    "email_not_verified": "Email not verified. Please check your email."
+    "email_not_verified": "Email not verified. Please check your email.",
+
+    "allowed_domains": "Allowed domains: {{domains}}",
+    "error_password_mismatch": "Passwords do not match",
+    "error_username_format": "Invalid username format. Must start with a letter, contain only lowercase letters and numbers, and be 1-31 characters long.",
+    "error_username_guest": "Username cannot start with \"guest\"",
+    "error_failed": "Registration failed",
+    "error_user_exists": "Username already exists",
+    "error_linux_exists": "Linux username already exists"
 }

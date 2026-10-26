@@ -8,14 +8,16 @@ from django.contrib.auth import login as auth_login, logout as auth_logout, auth
 from django_ratelimit.decorators import ratelimit
 
 from django.contrib.auth.models import User
+from django.conf import settings
 from dariauth.models import Default, Profile, VPNInfo, LinuxInfo, GuestInfo, Server, LinuxGroup, Log, NFSShare
 from django.db.models import Max
 from .schema import *
-from .utils import check_active_status, check_admin_status, check_groupadmin_status, validate, ldapops, get_serverstat, send_email, send_verification_email, add_ip, delete_ip
+from .utils import check_active_status, check_admin_status, check_groupadmin_status, validate, ldapops, get_serverstat, send_email, send_verification_email, add_ip, delete_ip, smtp_config, email_connection, SMTP_KEYS, SMTP_SECURITY
 from .logging import logger
 
 from django.middleware.csrf import get_token
 import os
+import re
 import base64
 import subprocess
 import json
@@ -36,6 +38,9 @@ def ldap(request):
     ldapops.update_ldap()
     return {"success": True}
 
+# Top bar: two colors and the share (%) of the first one
+BAR_DEFAULTS = {"bar_color1": "#00b600", "bar_color2": "#0047b4", "bar_ratio": "66.3"}
+
 @api.get("/brand", auth=None)
 def brand(request):
     try:
@@ -46,7 +51,13 @@ def brand(request):
         sitename = Default.objects.get(key="sitename").value
     except Default.DoesNotExist:
         sitename = None
-    return {"sitename": sitename, "logo": logo}
+    try:
+        sitename_en = Default.objects.get(key="sitename_en").value or None
+    except Default.DoesNotExist:
+        sitename_en = None
+    bar = {d.key: d.value for d in Default.objects.filter(key__in=BAR_DEFAULTS)}
+    return {"sitename": sitename, "sitename_en": sitename_en, "logo": logo,
+            **{k: bar.get(k) or v for k, v in BAR_DEFAULTS.items()}}
 
 @api.get("/allowed-email-domains", auth=None)
 def allowed_email_domains(request):
@@ -66,6 +77,7 @@ def init(request):
 
     # Defaults
     sitename = data.get('sitename', '')
+    sitename_en = data.get('sitename_en', '')
     logo = data.get('logo', '')
     gid = data.get('gid', '')
     shell = data.get('shell', '')
@@ -92,7 +104,7 @@ def init(request):
             Default.objects.update_or_create(key="logo", defaults={'value': logo})
         else:
             Default.objects.get_or_create(key="logo", defaults={'value': ''})
-        for key in ['allowed_email_domains']:
+        for key in ['allowed_email_domains', 'sitename_en']:
             Default.objects.update_or_create(key=key, defaults={'value': data.get(key, '')})
 
         # Create group
@@ -491,7 +503,8 @@ def deactivated(request):
 def groupadmins(request):
     if not check_admin_status(request.user):
         return api.create_response(request, None, status=403)
-    groupadmins = User.objects.filter(profile__is_groupadmin=True)
+    # group admins are assigned by Linux username; skip users without a Linux account
+    groupadmins = User.objects.filter(profile__is_groupadmin=True, linux__isnull=False)
     rtn = []
     for groupadmin in groupadmins:
         group_names = groupadmin.groupadmins.values_list('group__name', flat=True)
@@ -676,6 +689,7 @@ def defaults(request):
         return api.create_response(request, None, status=403)
     data = json.loads(request.body)
     sitename = data.get('sitename', '')
+    sitename_en = data.get('sitename_en', '')
     logo = data.get('logo', '')
     gid = data.get('gid', '')
     shell = data.get('shell', '')
@@ -684,13 +698,26 @@ def defaults(request):
     if sitename == '' or gid == '' or shell == '':
         return api.create_response(request, None, status=400)
 
-    if Default.objects.filter(key="logo").exists():
-        if logo != '':
-            Default.objects.get(key="logo").update(value=logo)
+    bar = {k: str(data.get(k) or v).strip() for k, v in BAR_DEFAULTS.items()}
+    if not all(re.fullmatch(r'#[0-9a-fA-F]{6}', bar[k]) for k in ('bar_color1', 'bar_color2')):
+        return api.create_response(request, {"error": "invalid_color"}, status=400)
+    try:
+        ratio = float(bar['bar_ratio'])
+    except ValueError:
+        ratio = -1
+    if not 0 <= ratio <= 100:
+        return api.create_response(request, {"error": "invalid_ratio"}, status=400)
+    bar['bar_ratio'] = f"{ratio:g}"
+
+    if logo != '':
+        Default.objects.update_or_create(key="logo", defaults={'value': logo})
     else:
-        Default.objects.create(key="logo", value=logo)
+        Default.objects.get_or_create(key="logo", defaults={'value': ''})
 
     Default.objects.update_or_create(key="sitename", defaults={'value': sitename})
+    Default.objects.update_or_create(key="sitename_en", defaults={'value': sitename_en})
+    for key, value in bar.items():
+        Default.objects.update_or_create(key=key, defaults={'value': value})
     Default.objects.update_or_create(key="gid", defaults={'value': gid})
     Default.objects.update_or_create(key="shell", defaults={'value': shell})
     Default.objects.update_or_create(key="allowed_email_domains", defaults={'value': allowed_email_domains})
@@ -728,6 +755,65 @@ def transfer(request, username_from: str, username_to: str):
         li.user = user_to
         li.save()
     
+def smtp_from_request(data, cfg):
+    """Merge submitted SMTP fields into cfg; returns an error key or None.
+    An empty password keeps the saved one unless smtp_password_clear is set."""
+    for key in SMTP_KEYS:
+        if key == "smtp_password":
+            if data.get("smtp_password"):
+                cfg[key] = data["smtp_password"]
+            elif data.get("smtp_password_clear"):
+                cfg[key] = ""
+        elif key in data:
+            cfg[key] = str(data[key] or "").strip()
+    if not cfg["smtp_port"].isdigit() or not 0 < int(cfg["smtp_port"]) < 65536:
+        return "invalid_port"
+    if cfg["smtp_security"] not in SMTP_SECURITY:
+        return "invalid_security"
+    return None
+
+@api.get("/smtp")
+def smtp_get(request):
+    if not check_admin_status(request.user):
+        return api.create_response(request, None, status=403)
+    cfg = smtp_config()
+    password_set = bool(cfg.pop("smtp_password"))
+    return {**cfg, "smtp_password_set": password_set}
+
+@api.post("/smtp")
+def smtp_set(request):
+    if not check_admin_status(request.user):
+        return api.create_response(request, None, status=403)
+    cfg = smtp_config()
+    error = smtp_from_request(json.loads(request.body), cfg)
+    if error:
+        return api.create_response(request, {"error": error}, status=400)
+    for key in SMTP_KEYS:
+        Default.objects.update_or_create(key=key, defaults={'value': cfg[key]})
+    return {"success": True}
+
+@api.post("/smtp/test")
+def smtp_test(request):
+    """Send a test email with the submitted (not necessarily saved) settings."""
+    if not check_admin_status(request.user):
+        return api.create_response(request, None, status=403)
+    from django.core.mail import send_mail
+    data = json.loads(request.body)
+    cfg = smtp_config()
+    error = smtp_from_request(data, cfg)
+    if error:
+        return api.create_response(request, {"error": error}, status=400)
+    to = (data.get("to") or request.user.email or "").strip()
+    if not to:
+        return api.create_response(request, {"error": "no_recipient"}, status=400)
+    try:
+        send_mail("SMTP test", "This is a test email from the DARI admin page.",
+                  cfg["smtp_from"], [to], connection=email_connection(cfg))
+    except Exception as e:
+        logger.warning(f"SMTP test to {to} failed: {e}")
+        return api.create_response(request, {"error": "send_failed", "detail": str(e)[:300]}, status=502)
+    return {"success": True, "to": to}
+
 @api.post("/emailsend")
 def emailsend(request, subject: str, body: str):
     if not check_admin_status(request.user):
@@ -932,7 +1018,7 @@ def node_config(request, key: str):
         ],
         "allowed_users": sorted(allowed_users),
         "allowed_groups": sorted(group_names),
-        "ldap_base_dn": "dc=" + os.environ.get('LDAP_DOMAIN', 'dari'),
+        "ldap_base_dn": settings.LDAP_BASE_DN,
         "home_server_ip": home_server_ip,
     }
 

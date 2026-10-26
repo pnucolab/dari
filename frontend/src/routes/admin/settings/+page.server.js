@@ -1,4 +1,5 @@
-import { get, post } from '$lib/fetch';
+import { fail } from '@sveltejs/kit';
+import { get, post } from '#lib/fetch.js';
 
 export async function load({ cookies }) {
     const response = await get('defaults', cookies);

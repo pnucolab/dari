@@ -1,9 +1,8 @@
-import { env } from '$env/dynamic/private';
+import { API_BASE_URL } from '$app/env/private';
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET() {
-	const BASE_URL = env.API_BASE_URL || 'http://backend:8080/api/';
-	const url = new URL('vpn/profile', BASE_URL);
+	const url = new URL('vpn/profile', API_BASE_URL);
 
 	try {
 		const response = await fetch(url);

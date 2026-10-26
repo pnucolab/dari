@@ -92,7 +92,7 @@ api_key = <node-api-key>
 [ldap]
 # LDAP server URI (defaults to the DARI LDAP server)
 uri = ldaps://dari.example.com
-base_dn = dc=dari
+base_dn =                # filled in from the DARI API
 tls_cacert = /etc/dari/ldap-ca.crt
 
 [nfs]

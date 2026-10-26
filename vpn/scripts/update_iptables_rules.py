@@ -2,6 +2,10 @@
 import subprocess
 import time
 import os
+import ipaddress
+
+# VPN client subnet (both UDP and TCP pools), normalized the way iptables prints it
+VPN_SUBNET = str(ipaddress.ip_network(os.environ['VPN_SUBNET'], strict=False))
 
 def run_command(command):
     try:
@@ -11,22 +15,22 @@ def run_command(command):
         return None
 
 def clean_rules(ip_addresses):
-    current_ips = run_command("iptables -t nat -L POSTROUTING -n | grep 10.8.0.0 | grep -v dpt | tr -s ' ' | cut -d ' ' -f 5")
+    current_ips = run_command(f"iptables -t nat -L POSTROUTING -n | grep {VPN_SUBNET} | grep -v dpt | tr -s ' ' | cut -d ' ' -f 5")
     if current_ips is None:
         print(f"Failed to get current rules.")
     for ip_address in current_ips.split('\n'):
         if not ip_address in ip_addresses:
-            if run_command(f"iptables -t nat -D POSTROUTING -s 10.8.0.0/24 -d {ip_address}/32 -o eth0 -j MASQUERADE"):
+            if run_command(f"iptables -t nat -D POSTROUTING -s {VPN_SUBNET} -d {ip_address}/32 -o eth0 -j MASQUERADE"):
                 print(f"Deleted rule for IP: {ip_address}")
             else:
                 print(f"Failed to delete rule for IP: {ip_address}")
 
 def check_and_add_rule(ip_address):
     # Check if the rule already exists
-    check_cmd = f"iptables -t nat -C POSTROUTING -s 10.8.0.0/24 -d {ip_address}/32 -o eth0 -j MASQUERADE"
+    check_cmd = f"iptables -t nat -C POSTROUTING -s {VPN_SUBNET} -d {ip_address}/32 -o eth0 -j MASQUERADE"
     if run_command(check_cmd) is None:
         # Rule doesn't exist, so add it
-        add_cmd = f"iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -d {ip_address}/32 -o eth0 -j MASQUERADE"
+        add_cmd = f"iptables -t nat -A POSTROUTING -s {VPN_SUBNET} -d {ip_address}/32 -o eth0 -j MASQUERADE"
         if run_command(add_cmd) is None:
             print(f"Added rule for IP: {ip_address}")
         else:

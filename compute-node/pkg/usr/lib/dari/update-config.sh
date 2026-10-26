@@ -41,7 +41,23 @@ RESPONSE=$(curl -sSf "$CONFIG_URL" 2>/dev/null) || {
 # Parse NFS shares from JSON response
 NFS_SHARES=$(echo "$RESPONSE" | jq -r '.nfs_shares // []')
 NFS_COUNT=$(echo "$NFS_SHARES" | jq 'length')
-LDAP_BASE_DN=$(echo "$RESPONSE" | jq -r '.ldap_base_dn // "dc=dari"')
+LDAP_BASE_DN=$(echo "$RESPONSE" | jq -r '.ldap_base_dn // empty')
+
+# Keep the LDAP base DN in sync with the DARI server
+if [ -n "$LDAP_BASE_DN" ]; then
+    if [ "$(parse_conf "base_dn")" != "$LDAP_BASE_DN" ]; then
+        sed -i "s|^base_dn =.*|base_dn = ${LDAP_BASE_DN}|" "$CONF"
+    fi
+    if [ -f /etc/nslcd.conf ] && ! grep -qx "base ${LDAP_BASE_DN}" /etc/nslcd.conf; then
+        if grep -q "^base " /etc/nslcd.conf; then
+            sed -i "s|^base .*|base ${LDAP_BASE_DN}|" /etc/nslcd.conf
+        else
+            sed -i "/^uri /a base ${LDAP_BASE_DN}" /etc/nslcd.conf
+        fi
+        systemctl restart nslcd 2>/dev/null || true
+        logger -t dari-update "LDAP base DN set to ${LDAP_BASE_DN}"
+    fi
+fi
 
 # Track if anything changed
 CHANGED=false

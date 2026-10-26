@@ -1,25 +1,26 @@
-import i18n from 'sveltekit-i18n';
+import { defineI18n } from 'sveltekit-i18n/kit';
 
 /** @type {import('sveltekit-i18n').Config} */
-const config = ({
+export const config = ({
+  initLocale: 'ko',
   loaders: [
     {
       locale: 'ko',
-      key: 'user',
+      namespace: 'user',
       loader: async () => (
         await import('./locales/user/ko.json')
       ).default,
     },
     {
       locale: 'en',
-      key: 'user',
+      namespace: 'user',
       loader: async () => (
         await import('./locales/user/en.json')
       ).default,
     },
     {
       locale: 'ko',
-      key: 'login',
+      namespace: 'login',
       routes: ['/login'],
       loader: async () => (
         await import('./locales/login/ko.json')
@@ -27,7 +28,7 @@ const config = ({
     },
     {
       locale: 'en',
-      key: 'login',
+      namespace: 'login',
       routes: ['/login'],
       loader: async () => (
         await import('./locales/login/en.json')
@@ -35,7 +36,7 @@ const config = ({
     },
     {
       locale: 'ko',
-      key: 'register',
+      namespace: 'register',
       routes: ['/register', '/verify-email'],
       loader: async () => (
         await import('./locales/register/ko.json')
@@ -43,7 +44,7 @@ const config = ({
     },
     {
       locale: 'en',
-      key: 'register',
+      namespace: 'register',
       routes: ['/register', '/verify-email'],
       loader: async () => (
         await import('./locales/register/en.json')
@@ -51,7 +52,7 @@ const config = ({
     },
     {
       locale: 'ko',
-      key: 'forgot-password',
+      namespace: 'forgot-password',
       routes: ['/forgot-password'],
       loader: async () => (
         await import('./locales/forgot-password/ko.json')
@@ -59,7 +60,7 @@ const config = ({
     },
     {
       locale: 'en',
-      key: 'forgot-password',
+      namespace: 'forgot-password',
       routes: ['/forgot-password'],
       loader: async () => (
         await import('./locales/forgot-password/en.json')
@@ -67,7 +68,7 @@ const config = ({
     },
     {
       locale: 'ko',
-      key: 'reset-password',
+      namespace: 'reset-password',
       routes: ['/reset-password'],
       loader: async () => (
         await import('./locales/reset-password/ko.json')
@@ -75,7 +76,7 @@ const config = ({
     },
     {
       locale: 'en',
-      key: 'reset-password',
+      namespace: 'reset-password',
       routes: ['/reset-password'],
       loader: async () => (
         await import('./locales/reset-password/en.json')
@@ -83,14 +84,46 @@ const config = ({
     },
     {
       locale: 'ko',
-      key: 'common',
+      namespace: 'admin',
+      routes: [/^\/admin(\/|$)/],
+      loader: async () => (
+        await import('./locales/admin/ko.json')
+      ).default,
+    },
+    {
+      locale: 'en',
+      namespace: 'admin',
+      routes: [/^\/admin(\/|$)/],
+      loader: async () => (
+        await import('./locales/admin/en.json')
+      ).default,
+    },
+    {
+      locale: 'ko',
+      namespace: 'init',
+      routes: ['/init'],
+      loader: async () => (
+        await import('./locales/init/ko.json')
+      ).default,
+    },
+    {
+      locale: 'en',
+      namespace: 'init',
+      routes: ['/init'],
+      loader: async () => (
+        await import('./locales/init/en.json')
+      ).default,
+    },
+    {
+      locale: 'ko',
+      namespace: 'common',
       loader: async () => (
         await import('./locales/common/ko.json')
       ).default,
     },
     {
       locale: 'en',
-      key: 'common',
+      namespace: 'common',
       loader: async () => (
         await import('./locales/common/en.json')
       ).default,
@@ -98,4 +131,7 @@ const config = ({
   ]
 });
 
-export const { t, locale, locales, loading, loadTranslations, addTranslations, setLocale, setRoute } = new i18n(config);
+export const { handle, load, use, get } = defineI18n(config, {
+  // the `lang` cookie set by the language menu, Korean by default
+  preferredLocale: (event) => event.cookies ? (event.cookies.get('lang') || 'ko').toLowerCase() : undefined,
+});

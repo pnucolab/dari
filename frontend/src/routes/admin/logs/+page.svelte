@@ -8,19 +8,22 @@
         TableBodyRow,
         TableBodyCell,
         Button,
-    } from 'flowbite-svelte';
-    import { ChevronLeftOutline, ChevronRightOutline } from 'flowbite-svelte-icons';
+        Icon,
+    } from '#lib/components/ui/index.js';
 
     import { onMount, onDestroy } from 'svelte';
-    import { formatDate } from '$lib/utils';
+    import { formatDate } from '#lib/utils.js';
+    import { get } from '#lib/translations.js';
 
-    let logs = null;
-    let total = 0;
-    let currentPage = 1;
+    const i18n = get();
+
+    let logs = $state(null);
+    let total = $state(0);
+    let currentPage = $state(1);
     let perPage = 20;
     let refreshInterval;
 
-    $: totalPages = Math.ceil(total / perPage);
+    let totalPages = $derived(Math.ceil(total / perPage));
 
     onMount(() => {
         refreshLogs();
@@ -53,27 +56,27 @@
 </script>
 
 <div class="grid grid-cols-1 gap-4 p-4 w-full">
-    <Card size='none'>
+    <Card size="xl" class="p-4 sm:p-6 text-gray-500 dark:text-gray-400">
         <div class="flex justify-between items-center mb-5">
-            <h5 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">서비스 접속 기록</h5>
+            <h5 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{i18n.t('admin.logs.title')}</h5>
             {#if total > 0}
-            <span class="text-sm text-gray-500">총 {total}건</span>
+            <span class="text-sm text-gray-500">{i18n.t('admin.logs.total', { total })}</span>
             {/if}
         </div>
         <Table>
             <TableHead>
-                <TableHeadCell width="200px" class="text-center">아이디<br>(이름)</TableHeadCell>
-                <TableHeadCell width="150px" class="text-center">서비스</TableHeadCell>
-                <TableHeadCell>접속 기록</TableHeadCell>
+                <TableHeadCell width="200px" class="text-center">{i18n.t('user.username')}<br>({i18n.t('user.name')})</TableHeadCell>
+                <TableHeadCell width="150px" class="text-center">{i18n.t('user.service')}</TableHeadCell>
+                <TableHeadCell>{i18n.t('admin.logs.content')}</TableHeadCell>
             </TableHead>
-            <TableBody tableBodyClass="divide-y">
+            <TableBody class="divide-y">
                 {#if !logs}
                 <TableBodyRow>
-                    <TableBodyCell colspan="3" class="text-center">로그를 불러오는 중입니다...</TableBodyCell>
+                    <TableBodyCell colspan="3" class="text-center">{i18n.t('admin.logs.loading')}</TableBodyCell>
                 </TableBodyRow>
                 {:else if logs.length === 0}
                 <TableBodyRow>
-                    <TableBodyCell colspan="3" class="text-center">로그가 없습니다.</TableBodyCell>
+                    <TableBodyCell colspan="3" class="text-center">{i18n.t('admin.logs.none')}</TableBodyCell>
                 </TableBodyRow>
                 {:else}
                 {#each logs as log}
@@ -88,20 +91,20 @@
         </Table>
         {#if totalPages > 1}
         <div class="flex justify-center items-center gap-2 mt-4">
-            <Button outline size="sm" color="alternative" disabled={currentPage <= 1} on:click={() => goToPage(currentPage - 1)}>
-                <ChevronLeftOutline class="w-4 h-4" />
+            <Button outline size="sm" color="alternative" disabled={currentPage <= 1} onclick={() => goToPage(currentPage - 1)}>
+                <Icon name="chevron-left" class="w-4 h-4" />
             </Button>
             {#each Array(totalPages) as _, i}
                 {#if totalPages <= 7 || i === 0 || i === totalPages - 1 || (i >= currentPage - 2 && i <= currentPage)}
-                <Button size="sm" color={currentPage === i + 1 ? 'blue' : 'alternative'} outline={currentPage !== i + 1} on:click={() => goToPage(i + 1)}>
+                <Button size="sm" color={currentPage === i + 1 ? 'blue' : 'alternative'} outline={currentPage !== i + 1} onclick={() => goToPage(i + 1)}>
                     {i + 1}
                 </Button>
                 {:else if i === currentPage - 3 || i === currentPage + 1}
                 <span class="text-gray-400">...</span>
                 {/if}
             {/each}
-            <Button outline size="sm" color="alternative" disabled={currentPage >= totalPages} on:click={() => goToPage(currentPage + 1)}>
-                <ChevronRightOutline class="w-4 h-4" />
+            <Button outline size="sm" color="alternative" disabled={currentPage >= totalPages} onclick={() => goToPage(currentPage + 1)}>
+                <Icon name="chevron-right" class="w-4 h-4" />
             </Button>
         </div>
         {/if}

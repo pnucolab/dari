@@ -1,5 +1,4 @@
-import { get } from '$lib/fetch';
-import { loadTranslations } from '$lib/translations';
+import { get } from '#lib/fetch.js';
 import { redirect, error } from '@sveltejs/kit';
 
 /** @type {import('./$types').LayoutServerLoad} */

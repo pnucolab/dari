@@ -1,9 +1,11 @@
-import { get } from '$lib/fetch';
-import { loadTranslations } from '$lib/translations';
+import { get } from '#lib/fetch.js';
 import { redirect } from '@sveltejs/kit';
 
 /** @type {import('./$types').LayoutServerLoad} */
 export async function load({ url, cookies }) {
+    // depend on the URL so user and brand are re-fetched on every navigation
+    url.href;
+
     const response_me = await get('me', cookies);
 
     if (!response_me.ok || response_me.status !== 200) {
@@ -19,15 +21,8 @@ export async function load({ url, cookies }) {
         brand = response_brand.data;
     }
 
-    const { pathname, search } = url;
-    const route = `${pathname}${search}`;
-
-    let locale = (cookies.get('lang') || 'ko').toLowerCase();
-    await loadTranslations(locale, route);
-
     return {
         user: user,
         brand: brand,
-        i18n: { locale, route },
     };
 }

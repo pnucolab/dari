@@ -13,16 +13,16 @@ This is an IT infrastructure management system (DARI) that provides centralized 
 - **Backend**: Django + Django Ninja REST API (port 8080 internally)
 - **Database**: PostgreSQL 13
 - **LDAP**: OpenLDAP server for Linux authentication (port 636)
-- **VPN**: OpenVPN server with OTP authentication (port 1194/udp)
+- **VPN**: OpenVPN server with OTP authentication (port 1194/udp, 1194/tcp fallback)
 - **Reverse Proxy**: Caddy server handling HTTPS and access control
 - **Task Queue**: Celery with RabbitMQ for async tasks (user removal, deactivation)
 
 ### Key Integration Points
 1. **LDAP Authentication**: All regular users authenticate via LDAP with passwords stored as SSHA hashes
 2. **LDAP Sync**: Backend maintains LDAP directory synchronized with Django database for Linux PAM authentication
-3. **VPN Auth**: OpenVPN uses openvpn-auth-ldap plugin to authenticate directly against LDAP server + PAM for OTP validation
+3. **VPN Auth**: OpenVPN auth-pam plugin runs a PAM stack: LDAP bind as the user (`vpn/scripts/ldap-auth.py`) + Google Authenticator OTP
 4. **Session Management**: Frontend uses cookies for Django session authentication
-5. **IP Whitelisting**: Caddy restricts most routes to configured networks (default: 192.0.2.0/24, 198.51.100.0/24)
+5. **IP Whitelisting**: Caddy restricts most routes to configured networks (configured networks)
 
 ### Data Flow
 - **Registration**: User registers via `/api/register` → Backend atomically creates:
@@ -170,7 +170,7 @@ Root layout server load function:
 ## Important Configuration
 
 ### LDAP Integration
-- LDAP domain derived from `LDAP_DOMAIN` env var (e.g., "dari" → dc=dari)
+- Base DN from `LDAP_BASE_DN` env var (e.g., "dc=pnu,dc=med"), derived from `LDAP_DOMAIN` if empty; never hardcode it
 - Admin credentials: `cn=admin,dc=...` with `LDAP_ADMIN_PASSWORD`
 - Two OUs: `ou=users` and `ou=groups` under base DN
 - Users: `cn=<username>,ou=users,dc=...` with posixAccount + inetOrgPerson objectClasses
@@ -190,11 +190,16 @@ Root layout server load function:
 
 ### VPN OTP Flow
 1. User requests QR via `/api/qr` → Backend runs `google-authenticator` → Stores secret in `/etc/qr/<username>`
-2. VPN server uses two authentication plugins in sequence:
-   - `openvpn-auth-ldap.so` - Validates username/password against LDAP (`ou=users,dc=bce`)
-   - `openvpn-plugin-auth-pam.so` - Validates OTP code via Google Authenticator PAM module
+2. VPN server uses `openvpn-plugin-auth-pam.so`, which splits the static-challenge response (SCRV1) into password and OTP
+   for the PAM stack in [vpn/pam.d/openvpn](vpn/pam.d/openvpn):
+   - `pam_exec` + [vpn/scripts/ldap-auth.py](vpn/scripts/ldap-auth.py) - Binds as `cn=<user>,ou=users,<LDAP_BASE_DN>`
+   - `pam_google_authenticator` - Validates the OTP code
 3. VPN access granted only if both LDAP password and OTP are valid
-4. Configuration: [vpn/auth-ldap.conf](vpn/auth-ldap.conf) and [vpn/server.conf](vpn/server.conf)
+4. Configuration: [vpn/pam.d/openvpn](vpn/pam.d/openvpn) and [vpn/server.conf](vpn/server.conf)
+5. [vpn/scripts/start.sh](vpn/scripts/start.sh) runs a UDP server and a TCP fallback server (generated from server.conf),
+   passes subnet/routes/session-token options from env, and writes the client profile
+6. Session tokens (`auth-gen-token`) let clients reconnect without OTP; the token secret and tls-crypt key live in the PKI volume
+7. [auto-update.sh](auto-update.sh) applies security updates to all services (systemd timer via `install-auto-update.sh`); all images are Alpine based
 
 ## Deployment Notes
 
@@ -202,7 +207,9 @@ Root layout server load function:
 See [.env.example](.env.example) for all variables. Critical ones:
 - `SECRET_KEY` - Django secret (generate with `openssl rand -base64 32`)
 - `LDAP_ADMIN_PASSWORD` - LDAP admin password
-- `LDAP_DOMAIN` - LDAP domain (e.g., "dari" becomes dc=dari)
+- `LDAP_DOMAIN` / `LDAP_BASE_DN` - LDAP domain and base DN (e.g., "pnu.med" / "dc=pnu,dc=med")
+- `VPN_PUSH_ROUTES`, `VPN_NAT_HOSTS`, `VPN_SUBNET`, `VPN_SESSION_LIFETIME`, `VPN_SESSION_RENEWAL`, `VPN_CERT_RENEW_DAYS` - VPN settings
+- `LDAP_CERT_RENEW_DAYS`, `AUTO_UPDATE_SCHEDULE`, `AUTO_UPDATE_REBUILD_DAYS`, `CELERY_CONCURRENCY` - LDAP TLS, security updates, Celery
 - `RABBITMQ_DEFAULT_USER/PASS` - RabbitMQ credentials for Celery
 - `SITE_DOMAIN` - Domain for Caddy HTTPS certificates
 

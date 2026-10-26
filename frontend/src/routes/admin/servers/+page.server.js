@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 
-import { post, get, del } from '$lib/fetch';
+import { post, get, del } from '#lib/fetch.js';
 import { fail } from '@sveltejs/kit';
 
 export async function load({ parent, cookies }) {

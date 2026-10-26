@@ -22,17 +22,17 @@ A comprehensive IT infrastructure management platform that provides centralized 
 - **Backend**: Django + Django Ninja REST API (port 8080 internally)
 - **Database**: PostgreSQL 13
 - **LDAP**: OpenLDAP server for Linux authentication (port 636)
-- **VPN**: OpenVPN server with OTP authentication (port 1194/udp)
+- **VPN**: OpenVPN server with OTP authentication (port 1194/udp, 1194/tcp fallback)
 - **Reverse Proxy**: Caddy server handling HTTPS and access control
 - **Task Queue**: Celery with RabbitMQ for async tasks
 
 ### Key Technologies
 
 - **Backend**: Python, Django 4.2, Django Ninja, Celery
-- **Frontend**: SvelteKit, Flowbite, Tailwind CSS
+- **Frontend**: SvelteKit, Tailwind CSS
 - **Database**: PostgreSQL 13
 - **Directory**: OpenLDAP with python-ldap
-- **VPN**: OpenVPN with openvpn-auth-ldap and PAM OTP
+- **VPN**: OpenVPN with PAM (LDAP bind + Google Authenticator OTP)
 - **Reverse Proxy**: Caddy 2
 - **Message Queue**: RabbitMQ
 
@@ -60,10 +60,19 @@ A comprehensive IT infrastructure management platform that provides centralized 
    Required variables:
    - `SECRET_KEY`: Django secret key (generate with `openssl rand -base64 32`)
    - `LDAP_ADMIN_PASSWORD`: LDAP admin password
-   - `LDAP_DOMAIN`: LDAP domain (e.g., "dari" becomes dc=dari)
+   - `LDAP_DOMAIN`: LDAP domain (e.g., "pnu.med")
+   - `LDAP_BASE_DN`: LDAP base DN (e.g., "dc=pnu,dc=med"; derived from `LDAP_DOMAIN` if empty)
    - `SITE_DOMAIN`: Domain for the service (e.g., vpn.example.com)
    - `DB_USER`, `DB_PASSWORD`, `DB_NAME`: PostgreSQL credentials
    - `RABBITMQ_DEFAULT_USER`, `RABBITMQ_DEFAULT_PASS`: RabbitMQ credentials
+
+   VPN variables:
+   - `VPN_PUSH_ROUTES`: Comma-separated CIDRs pushed to clients as routes
+   - `VPN_NAT_HOSTS`: Comma-separated hostnames clients reach via NAT on 80/443
+   - `VPN_SUBNET`: Client subnet (first half UDP, second half TCP fallback)
+   - `VPN_SESSION_LIFETIME`: Max session length before OTP is required again (0 = never while online)
+   - `VPN_SESSION_RENEWAL`: Token renewal interval; offline clients reconnect without OTP for up to 2x this
+   - `VPN_CERT_RENEW_DAYS`: Renew the server certificate this many days before expiry
 
 3. **Start services**
 
@@ -136,10 +145,42 @@ A comprehensive IT infrastructure management platform that provides centralized 
 ### VPN Architecture
 
 - OpenVPN uses two-factor authentication:
-  1. **LDAP password**: Validated via openvpn-auth-ldap plugin
+  1. **LDAP password**: Validated by binding as the user (PAM `pam_exec` + `vpn/scripts/ldap-auth.py`)
   2. **OTP code**: Validated via PAM with Google Authenticator
 - Client profile is dynamically generated using `SITE_DOMAIN`
 - Profile available at `/api/vpn/profile` for URL import
+
+### VPN Security and Reconnection
+
+- Control channel is wrapped with `tls-crypt` (unauthenticated packets are dropped, port scans see nothing)
+- TLS 1.3 only with ECDHE (X25519); data channel is AEAD only (AES-256-GCM, ChaCha20-Poly1305)
+- Clients verify the server certificate (`remote-cert-tls server`, `verify-x509-name`)
+- After the first login the server issues a session token (`auth-gen-token`), so reconnects,
+  hourly key rotation and server restarts do not prompt for OTP again (see `VPN_SESSION_LIFETIME`/`VPN_SESSION_RENEWAL`)
+- Every device (username + device id sent via `push-peer-info`) keeps the same VPN IP across reconnects
+  and server restarts (`vpn/scripts/client-ip.py`, map stored in the PKI volume)
+- The server certificate is renewed automatically `VPN_CERT_RENEW_DAYS` before expiry
+- Clients roam between networks without dropping the session (`float`), keep the tunnel
+  interface up while reconnecting, and fall back to TCP when UDP is blocked
+- Profiles generated before tls-crypt was enabled must be downloaded again
+
+## Security Updates
+
+All images are Alpine based (official `*-alpine` images, or `alpine:3` for vpn/ldap) and use
+floating tags (`postgres:18-alpine`, `caddy:2-alpine`, `rabbitmq:4-alpine`, `python:3.15-alpine`,
+`node:24-alpine`) so patch releases are picked up automatically. Python dependencies are pinned
+to compatible releases (`~=`) so rebuilds take patch versions.
+
+`auto-update.sh` pulls newer upstream images, rebuilds local images when their base image or
+Alpine packages have updates (or when they are older than `AUTO_UPDATE_REBUILD_DAYS`), restarts
+services whose TLS certificate is due for renewal, and recreates only the changed containers.
+Install it as a systemd timer on the Docker host (`AUTO_UPDATE_SCHEDULE`, daily by default):
+
+```bash
+./install-auto-update.sh
+```
+
+Variables: `AUTO_UPDATE_SCHEDULE`, `AUTO_UPDATE_REBUILD_DAYS`, `VPN_CERT_RENEW_DAYS`, `LDAP_CERT_RENEW_DAYS`.
 
 ## Development
 
@@ -193,10 +234,10 @@ docker compose exec -T db psql -U dari dari < backup.sql
 
 ```bash
 # Search users
-docker compose exec ldap ldapsearch -x -H ldap://localhost -b "ou=users,dc=dari" -D "cn=admin,dc=dari" -w <admin_password>
+docker compose exec ldap ldapsearch -x -H ldap://localhost -b "ou=users,dc=pnu,dc=med" -D "cn=admin,dc=pnu,dc=med" -w <admin_password>
 
 # Search groups
-docker compose exec ldap ldapsearch -x -H ldap://localhost -b "ou=groups,dc=dari" -D "cn=admin,dc=dari" -w <admin_password>
+docker compose exec ldap ldapsearch -x -H ldap://localhost -b "ou=groups,dc=pnu,dc=med" -D "cn=admin,dc=pnu,dc=med" -w <admin_password>
 ```
 
 ## API Endpoints
@@ -219,12 +260,22 @@ Key endpoints in `/api/`:
 
 ## Configuration
 
+### Admin Settings
+
+Configured in the portal (Admin > Settings / Email), stored in the database:
+
+- **Institution name** (Korean, and optionally English shown when the UI is in English) and logo
+- **Top bar colors**: two colors and the share (%) of each
+- **SMTP** (Email > SMTP settings): host, port, SSL/TLS / STARTTLS / none, credentials, from address,
+  subject prefix, with a test send. The `EMAIL_*` values in `.env` are used until SMTP is saved here;
+  the saved password is never sent back to the browser.
+
 ### LDAP Structure
 
-- Base DN: `dc=<LDAP_DOMAIN>`
-- Users OU: `ou=users,dc=<LDAP_DOMAIN>`
-- Groups OU: `ou=groups,dc=<LDAP_DOMAIN>`
-- Admin DN: `cn=admin,dc=<LDAP_DOMAIN>`
+- Base DN: `<LDAP_BASE_DN>`
+- Users OU: `ou=users,<LDAP_BASE_DN>`
+- Groups OU: `ou=groups,<LDAP_BASE_DN>`
+- Admin DN: `cn=admin,<LDAP_BASE_DN>`
 
 ### Home Directories
 

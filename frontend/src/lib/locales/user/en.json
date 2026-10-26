@@ -123,5 +123,10 @@
     "new_password_confirm": "Confirm New Password",
     "password_changed_success": "Password has been changed successfully.",
     "change_password": "Change Password",
-    "changing_password": "Changing..."
+    "changing_password": "Changing...",
+
+    "password_error_mismatch": "New passwords do not match",
+    "password_error_length": "Password must be at least 8 characters long",
+    "password_error_failed": "Failed to change password",
+    "password_error_old": "Invalid old password"
 }

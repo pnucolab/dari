@@ -1,4 +1,4 @@
-import { post } from '$lib/fetch';
+import { post } from '#lib/fetch.js';
 import { fail } from '@sveltejs/kit';
 
 /** @type {import('./$types').Actions} */
@@ -12,14 +12,16 @@ export const actions = {
 		// Validate passwords match
 		if (new_password !== new_password_confirm) {
 			return fail(400, {
-				password_error: 'New passwords do not match'
+				password_error: 'user.password_error_mismatch',
+				password_error_i18n: true
 			});
 		}
 
 		// Validate password length
 		if (new_password.length < 8) {
 			return fail(400, {
-				password_error: 'Password must be at least 8 characters long'
+				password_error: 'user.password_error_length',
+				password_error_i18n: true
 			});
 		}
 
@@ -31,14 +33,18 @@ export const actions = {
 		const response = await post(`password?${queryString}`, {}, cookies);
 
 		if (!response.ok || response.status !== 200) {
-			let errorMsg = 'Failed to change password';
+			// keys of the `user` namespace, except for errors passed through from the backend
+			let errorMsg = 'user.password_error_failed';
+			let errorI18n = true;
 			if (response.status === 401) {
-				errorMsg = 'Invalid old password';
+				errorMsg = 'user.password_error_old';
 			} else if (response.data?.error) {
 				errorMsg = response.data.error;
+				errorI18n = false;
 			}
 			return fail(response.status || 400, {
-				password_error: errorMsg
+				password_error: errorMsg,
+				password_error_i18n: errorI18n
 			});
 		}
 

@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:18
+    image: postgres:18-alpine
     environment:
       - POSTGRES_DB=${DB_NAME}
       - POSTGRES_USER=${DB_USER}
@@ -10,7 +10,7 @@ services:
     restart: always
 
   caddy:
-    image: caddy:2.10.2
+    image: caddy:2-alpine
     ports:
       - "8080:80"
     volumes:
@@ -32,14 +32,16 @@ services:
       - LDAP_CONFIG_PASSWORD=${LDAP_ADMIN_PASSWORD}
       - LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD}
       - LDAP_TLS_VERIFY_CLIENT=try
+      - LDAP_CERT_RENEW_DAYS=${LDAP_CERT_RENEW_DAYS}
+      - SITE_DOMAIN=${SITE_DOMAIN}
     volumes:
-      - ./db/ldap_data:/var/lib/ldap
-      - ./db/ldap_config:/etc/ldap/slapd.d
-      - ./db/ldap_certs:/container/service/slapd/assets/certs
+      - ./db/ldap_data:/var/lib/openldap/openldap-data
+      - ./db/ldap_config:/etc/openldap/slapd.d
+      - ./db/ldap_certs:/etc/openldap/certs
     restart: always
 
   rabbitmq:
-    image: rabbitmq:4
+    image: rabbitmq:4-alpine
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
@@ -52,7 +54,7 @@ services:
 
   celery_worker:
     build: ./backend
-    command: sh -c "celery -A backend worker -l info"
+    command: sh -c "celery -A backend worker -l info --concurrency ${CELERY_CONCURRENCY:-2}"
     environment:
       - SECRET_KEY=${SECRET_KEY}
       - SITE_DOMAIN=${SITE_DOMAIN}
@@ -63,6 +65,7 @@ services:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
       - LDAP_DOMAIN=${LDAP_DOMAIN}
+      - LDAP_BASE_DN=${LDAP_BASE_DN}
       - LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD}
       - EMAIL_HOST=${EMAIL_HOST}
       - EMAIL_PORT=${EMAIL_PORT}
@@ -93,6 +96,7 @@ services:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
       - LDAP_DOMAIN=${LDAP_DOMAIN}
+      - LDAP_BASE_DN=${LDAP_BASE_DN}
       - LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD}
       - EMAIL_HOST=${EMAIL_HOST}
       - EMAIL_PORT=${EMAIL_PORT}
@@ -129,6 +133,7 @@ services:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
       - LDAP_DOMAIN=${LDAP_DOMAIN}
+      - LDAP_BASE_DN=${LDAP_BASE_DN}
       - LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD}
       - LOG_FILE=/dev/null
       - DEBUG=True
@@ -141,7 +146,6 @@ services:
       - EMAIL_SUBJECT_PREFIX=${EMAIL_SUBJECT_PREFIX}
     volumes:
       - ./vpn/pam.d/openvpn:/etc/pam.d/openvpn
-      - ./vpn/auth-ldap.conf:/etc/openvpn/auth-ldap.conf
       - ./db/qr:/etc/qr
       - ./vpn/server.conf:/etc/openvpn/server.conf
       - ./vpn/easy-rsa:/etc/easy-rsa

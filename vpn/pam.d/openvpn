@@ -1,2 +1,3 @@
-auth required /lib/x86_64-linux-gnu/security/pam_google_authenticator.so secret=/etc/qr/${USER} authtok_prompt=pin user=root echo_verification_code
+auth requisite pam_exec.so quiet expose_authtok /etc/openvpn/scripts/ldap-auth.py
+auth required pam_google_authenticator.so secret=/etc/qr/${USER} authtok_prompt=pin user=root echo_verification_code
 account required pam_permit.so

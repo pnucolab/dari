@@ -1,9 +1,17 @@
+{
+    # clients connecting by IP send no SNI
+    default_sni {$SITE_DOMAIN}
+}
+
 {$SITE_DOMAIN} {
     reverse_proxy http://frontend:3000
 
-    log {
+    log access_file {
         format console
         output file /var/log/caddy/access.log
+    }
+    log access_stderr {
+        format console
         output stderr
     }
 }

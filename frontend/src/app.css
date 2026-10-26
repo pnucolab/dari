@@ -1,3 +1,121 @@
-@import "tailwindcss/base";
-@import "tailwindcss/components";
-@import "tailwindcss/utilities";
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+	/* accent palette (hover color of the "alternative" buttons) */
+	--color-primary-50: #FFF5F2;
+	--color-primary-100: #FFF1EE;
+	--color-primary-200: #FFE4DE;
+	--color-primary-300: #FFD5CC;
+	--color-primary-400: #FFBCAD;
+	--color-primary-500: #FE795D;
+	--color-primary-600: #EF562F;
+	--color-primary-700: #EB4F27;
+	--color-primary-800: #CC4522;
+	--color-primary-900: #A5371B;
+}
+
+/*
+	Tailwind CSS v3 compatibility: v4 changed the default border color to
+	currentColor, the placeholder color, and dropped cursor: pointer on buttons.
+*/
+@layer base {
+	*,
+	::after,
+	::before,
+	::backdrop,
+	::file-selector-button {
+		border-color: var(--color-gray-200, currentcolor);
+	}
+
+	input::placeholder,
+	textarea::placeholder {
+		color: var(--color-gray-400);
+	}
+
+	button:not(:disabled),
+	[role="button"]:not(:disabled) {
+		cursor: pointer;
+	}
+}
+
+/* Default typography for page content. In the base layer so Tailwind utility classes
+   (e.g. text-white on a link styled as a button) override it, as they did in Tailwind 3. */
+@layer base {
+    body {
+        font-family: 'Noto Sans KR', sans-serif;
+        font-size: 1.125rem;
+        line-height: 1.75rem;
+        color: #374151;
+    }
+    main a {
+        color: rgb(37 99 235);
+    }
+    main a:hover {
+        text-decoration-line: underline;
+    }
+    main h1 {
+        margin-bottom: 1rem;
+        font-size: 1.5rem;
+        font-weight: bold;
+        letter-spacing: -0.025em;
+        color: #111827;
+    }
+
+    main h2 {
+        margin-bottom: 0.75rem;
+        font-size: 1.25rem;
+        font-weight: bold;
+        letter-spacing: -0.025em;
+        color: #111827;
+    }
+
+    main ul {
+        list-style: disc;
+        margin-left: 2rem;
+        margin-bottom: 1.5rem;
+        list-style-position: outside;
+    }
+
+    main li {
+        margin-bottom: 0.2rem;
+        color: #374151;
+    }
+
+    main p {
+        margin-bottom: 1.5rem;
+        color: #374151;
+    }
+
+    section {
+        margin-bottom: 2rem;
+    }
+
+    pre {
+        background-color: #f4f4f4;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 1em;
+        overflow-x: auto;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 14px;
+        line-height: 1.5;
+        margin: 1em 2em;
+    }
+
+    code {
+        background-color: #f4f4f4;
+        border-radius: 3px;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 0.9em;
+        padding: 0.2em 0.4em;
+    }
+
+    pre code {
+        background-color: transparent;
+        border-radius: 0;
+        padding: 0;
+        font-size: 1em;
+    }
+}

@@ -1,6 +1,6 @@
-import { env } from '$env/dynamic/private';
+import { API_BASE_URL } from '$app/env/private';
 
-const BASE_URL = env.API_BASE_URL || 'http://backend:8080/api/';
+const BASE_URL = API_BASE_URL;
 
 async function send({ method, path, data, cookies }) {
     const url = new URL(path, BASE_URL);

@@ -1,4 +1,4 @@
-import { get } from '$lib/fetch';
+import { get } from '#lib/fetch.js';
 import { fail } from '@sveltejs/kit';
 
 export const actions = {

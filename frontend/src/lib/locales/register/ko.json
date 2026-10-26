@@ -15,5 +15,13 @@
     "success": "회원가입이 완료되었습니다. 이메일 인증 후 관리자 승인이 완료되면 로그인이 가능합니다.",
     "verify_success": "이메일 인증이 완료되었습니다. 로그인해주세요.",
     "verify_failed": "이메일 인증에 실패했습니다. 링크가 만료되었거나 유효하지 않습니다.",
-    "email_not_verified": "이메일 인증이 완료되지 않았습니다. 이메일을 확인해주세요."
+    "email_not_verified": "이메일 인증이 완료되지 않았습니다. 이메일을 확인해주세요.",
+
+    "allowed_domains": "허용 도메인: {{domains}}",
+    "error_password_mismatch": "비밀번호가 일치하지 않습니다.",
+    "error_username_format": "아이디 형식이 올바르지 않습니다. 영문 소문자로 시작하며, 영문 소문자와 숫자만 사용 가능합니다 (1-31자).",
+    "error_username_guest": "아이디는 \"guest\"로 시작할 수 없습니다.",
+    "error_failed": "회원가입에 실패했습니다.",
+    "error_user_exists": "이미 사용 중인 아이디입니다.",
+    "error_linux_exists": "이미 사용 중인 리눅스 아이디입니다."
 }

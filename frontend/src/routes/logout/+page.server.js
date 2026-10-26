@@ -1,4 +1,4 @@
-import { get } from '$lib/fetch';
+import { get } from '#lib/fetch.js';
 import { redirect } from '@sveltejs/kit';
 import { fail } from '@sveltejs/kit';
 

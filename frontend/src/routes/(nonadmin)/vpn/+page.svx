@@ -1,17 +1,16 @@
 <script>
-    import { List, Li, Alert, Button, Modal } from 'flowbite-svelte';
-    import { InfoCircleSolid, ExclamationCircleSolid } from 'flowbite-svelte-icons';
-    import { t } from '$lib/translations';
+    import { Alert, Button, Modal, Icon } from '#lib/components/ui/index.js';
+    import { get } from '#lib/translations.js';
     import { enhance } from '$app/forms';
 
-    export let data;
-    export let form;
+    let { data, form } = $props();
 
-    let user = null;
-    $: user = data.user;
+    const i18n = get();
 
-    let qr = null;
-    let show_qr = false;
+    let user = $derived(data.user);
+
+    let qr = $state(null);
+    let show_qr = $state(false);
 
     function handleSubmit() {
         return async ({ result, update }) => {
@@ -25,10 +24,10 @@
 </script>
 
 <Modal title="QR Code" bind:open={show_qr} size="xs" autoclose>
-    <p class="text-center">{$t('user.vpn.modal_text')}</p>
+    <p class="text-center">{i18n.t('user.vpn.modal_text')}</p>
     <img src={qr} class="w-full" alt="QR Code" />
     <div class="text-center">
-        <Button color="blue">{$t('user.close')}</Button>
+        <Button color="blue">{i18n.t('user.close')}</Button>
     </div>
 </Modal>
 
@@ -36,18 +35,18 @@
 
 <section id="about">
 
-# {$t(\`user.vpn_title\`)}
+# {i18n.t(\`user.vpn_title\`)}
 
-{$t(\`user.vpn_content_1\`)} **{$t(\`user.vpn_content_2\`)}**.
+{i18n.t(\`user.vpn_content_1\`)} **{i18n.t(\`user.vpn_content_2\`)}**.
 
-{$t(\`user.vpn_content_3\`)}
+{i18n.t(\`user.vpn_content_3\`)}
 
 <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 mb-6">
 <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
 <tr>
-<th class="px-6 py-3">{$t('user.linux_server_name')}</th>
-<th class="px-6 py-3">{$t('user.linux_server_ip')}</th>
-<th class="px-6 py-3">{$t('user.linux_server_port')}</th>
+<th class="px-6 py-3">{i18n.t('user.linux_server_name')}</th>
+<th class="px-6 py-3">{i18n.t('user.linux_server_ip')}</th>
+<th class="px-6 py-3">{i18n.t('user.linux_server_port')}</th>
 </tr>
 </thead>
 <tbody>
@@ -59,62 +58,62 @@
 </tr>
 {:else}
 <tr class="bg-white dark:bg-gray-800">
-<td class="px-6 py-4 text-center" colspan="3">{$t('user.linux_server_none')}</td>
+<td class="px-6 py-4 text-center" colspan="3">{i18n.t('user.linux_server_none')}</td>
 </tr>
 {/each}
 </tbody>
 </table>
 
-{@html $t('user.vpn_content_4')}
+{@html i18n.t('user.vpn_content_4')}
 
 </section>
 
 <section id="otp">
 
-# {$t(\`user.vpn_otp_title\`)}
+# {i18n.t(\`user.vpn_otp_title\`)}
 
-{$t(\`user.vpn_otp_content_1\`)}
+{i18n.t(\`user.vpn_otp_content_1\`)}
 
-## {$t(\`user.vpn_otp_content_2\`)}
+## {i18n.t(\`user.vpn_otp_content_2\`)}
 
-{$t(\`user.vpn_otp_content_3\`)}
+{i18n.t(\`user.vpn_otp_content_3\`)}
 
 - FreeOTP
 - Google Authenticator
 - Microsoft Authenticator
 
-## {$t(\`user.vpn_otp_content_4\`)}
+## {i18n.t(\`user.vpn_otp_content_4\`)}
 
-{$t(\`user.vpn_otp_content_5\`)}
+{i18n.t(\`user.vpn_otp_content_5\`)}
 
 <form method="POST" action="?/vpn" use:enhance={handleSubmit}>
 {#if !user.vpn}
 <Alert color="red" class="mb-4">
-    <InfoCircleSolid slot="icon" class="w-5 h-5" />
+    {#snippet icon()}<Icon name="info-circle-solid" class="w-5 h-5" />{/snippet}
     <span class="text-lg">
-        {$t('user.vpn_otp_content_6-1')}
+        {i18n.t('user.vpn_otp_content_6-1')}
     </span>
 </Alert>
 {#if form?.error}
 <Alert color="red" class="mb-4" dismissable>
-    <ExclamationCircleSolid slot="icon" class="w-5 h-5" />
+    {#snippet icon()}<Icon name="exclamation-circle-solid" class="w-5 h-5" />{/snippet}
     <span class="text-lg">
-        {$t('user.vpn.qr_error')}
+        {i18n.t('user.vpn.qr_error')}
     </span>
 </Alert>
 {/if}
 <p class="text-center">
-    <Button type="submit" color="blue" size="xl">{$t('user.vpn_otp_content_4')}</Button>
+    <Button type="submit" color="blue" size="xl">{i18n.t('user.vpn_otp_content_4')}</Button>
 </p>
 {:else}
 <Alert color="red" class="mb-4">
-    <InfoCircleSolid slot="icon" class="w-5 h-5" />
+    {#snippet icon()}<Icon name="info-circle-solid" class="w-5 h-5" />{/snippet}
     <span class="text-lg">
-        {$t('user.vpn_otp_content_6-2')}
+        {i18n.t('user.vpn_otp_content_6-2')}
     </span>
 </Alert>
 <p class="text-center">
-    <Button color="blue" size="xl">{$t('user.vpn_otp_content_7')}</Button>
+    <Button color="blue" size="xl">{i18n.t('user.vpn_otp_content_7')}</Button>
 </p>
 {/if}
 </form>
@@ -123,32 +122,32 @@
 
 <section id="openvpn">
 
-# {$t(\`user.vpn_openvpn_title\`)}
+# {i18n.t(\`user.vpn_openvpn_title\`)}
 
-{$t(\`user.vpn_openvpn_content_1\`)}
+{i18n.t(\`user.vpn_openvpn_content_1\`)}
 
-- [{$t(\`user.vpn_openvpn_content_2\`)}](https://openvpn.net/client/)
+- [{i18n.t(\`user.vpn_openvpn_content_2\`)}](https://openvpn.net/client/)
 
-{$t(\`user.vpn_openvpn_content_3\`)}
+{i18n.t(\`user.vpn_openvpn_content_3\`)}
 
 <p class="text-center space-x-4">
-    <Button href="{data.profileUrl}" color="blue" size="xl" download="client.ovpn">{$t('user.vpn_openvpn_content_4')}</Button>
+    <Button href={data.profileUrl} color="blue" size="xl" download="client.ovpn">{i18n.t('user.vpn_openvpn_content_4')}</Button>
 </p>
 
-{$t(\`user.vpn_openvpn_content_5\`)}
+{i18n.t(\`user.vpn_openvpn_content_5\`)}
 
-- Username: {$t(\`user.vpn_openvpn_content_6\`)}
-- Password: {$t(\`user.vpn_openvpn_content_7\`)}
+- Username: {i18n.t(\`user.vpn_openvpn_content_6\`)}
+- Password: {i18n.t(\`user.vpn_openvpn_content_7\`)}
 
-{@html $t('user.vpn_openvpn_content_8')}
+{@html i18n.t('user.vpn_openvpn_content_8')}
 
 </section>
 
 <section id="connect">
 
-# {$t(\`user.vpn_connect_title\`)}
+# {i18n.t(\`user.vpn_connect_title\`)}
 
-{@html $t('user.vpn_connect_content_1')}
+{@html i18n.t('user.vpn_connect_content_1')}
 
 </section>
 
